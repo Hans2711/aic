@@ -6,7 +6,7 @@ AI-assisted git commit message generator.
 
 - Generates N (configurable) commit message suggestions from OpenAI Chat Completions
 - Default model: `gpt-4o-mini` (override with `AIC_MODEL`)
-- Default suggestions: 5 (override with `AIC_SUGGESTIONS` 1–15)
+- Default suggestions: 5 (override with `AIC_SUGGESTIONS` 1–10)
 - Optional extra instruction via `-s "extra context"`
 - Interactive selection with clear defaults & consistent symbols (✓ success, ✗ error, ➤ prompt, ℹ info)
 - Non-interactive / CI mode (`AIC_NON_INTERACTIVE=1`) with optional auto commit (`AIC_AUTO_COMMIT=1`)
@@ -136,7 +136,7 @@ aic --version
 |----------------------|---------|
 | `OPENAI_API_KEY`     | (required) API key |
 | `AIC_MODEL`          | (optional) Model (default: gpt-4o-mini) |
-| `AIC_SUGGESTIONS`    | (optional) Suggestions count 1–15 (default: 5) |
+| `AIC_SUGGESTIONS`    | (optional) Suggestions count 1–10 (default: 5) |
 | `AIC_PROVIDER`       | (optional) Provider (default: openai) |
 | `AIC_DEBUG`          | (optional) `1` for verbose raw response debug |
 | `AIC_DEBUG_SUMMARY`  | (optional) `1` to print diff summary debug info when large diff summarization triggers |
@@ -212,11 +212,10 @@ export AIC_DEBUG_SUMMARY=1
 - Only OpenAI provider supported currently.
 - For large diffs the raw diff portion is truncated to ~16k chars after generating a summary; a cutoff note shows omitted size.
 - If summarization request fails, fallback is a plain truncation (legacy behavior).
-- Suggestions limited to 15 for usability.
+- Suggestions limited to 10 for quick single-key selection (1–9,0).
 - Version is embedded at build (override with: `go build -ldflags "-X github.com/diesi/aic/internal/version.Version=0.1.1"`).
 
 ## Roadmap Ideas
 
 - Support Anthropic / local providers via provider interface
 - Optional streaming output
-

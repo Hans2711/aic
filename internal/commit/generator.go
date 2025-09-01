@@ -35,11 +35,11 @@ func LoadConfig(systemAddition string) (Config, error) {
 	if cfg.Model == "gpt-5" {
 		cfg.Model = "gpt-5-2025-08-07"
 	}
-	if v := os.Getenv("AIC_SUGGESTIONS"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 15 { // sanity limit
-			cfg.Suggestions = n
-		}
-	}
+    if v := os.Getenv("AIC_SUGGESTIONS"); v != "" {
+        if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 10 { // sanity limit (max 10 for quick selection)
+            cfg.Suggestions = n
+        }
+    }
 	return cfg, nil
 }
 
@@ -231,32 +231,179 @@ func composeUserContent(originalDiff, truncatedDiff, summary string) string {
 
 // PromptUserSelect lets the user choose a suggestion.
 func PromptUserSelect(suggestions []string) (string, error) {
-	// Non-interactive auto-select first suggestion if AIC_NON_INTERACTIVE=1
-	if os.Getenv("AIC_NON_INTERACTIVE") == "1" {
-		if len(suggestions) == 0 {
-			return "", errors.New("no suggestions to select")
-		}
-		fmt.Printf("%s\n%sCommit message suggestions (non-interactive mode):%s\n", cli.ColorGray, cli.ColorBold, cli.ColorReset)
-		for i, s := range suggestions {
-			fmt.Printf("  %s[%d]%s %s%s%s\n", cli.ColorYellow, i+1, cli.ColorReset, cli.ColorCyan, s, cli.ColorReset)
-		}
-		return suggestions[0], nil
-	}
-	fmt.Printf("%s\n%s%s Commit message suggestions:%s\n", cli.ColorGray, cli.ColorBold, cli.IconInfo, cli.ColorReset)
-	for i, s := range suggestions {
-		fmt.Printf("  %s[%d]%s %s%s%s\n", cli.ColorYellow, i+1, cli.ColorReset, cli.ColorCyan, s, cli.ColorReset)
-	}
-	fmt.Printf("\n%s%s Choose a commit message %s[1-%d]%s %s[default: 1]%s: %s", cli.ColorBold, cli.IconPrompt, cli.ColorYellow, len(suggestions), cli.ColorReset, cli.ColorDim, cli.ColorReset, cli.ColorCyan)
-	var choiceInput string
-	fmt.Scanln(&choiceInput)
-	selected := 1
-	if choiceInput != "" {
-		if v, err := strconv.Atoi(choiceInput); err == nil && v >= 1 && v <= len(suggestions) {
-			selected = v
-		}
-	}
-	fmt.Printf("%s", cli.ColorReset)
-	return suggestions[selected-1], nil
+    // Non-interactive auto-select first suggestion if AIC_NON_INTERACTIVE=1
+    if os.Getenv("AIC_NON_INTERACTIVE") == "1" {
+        if len(suggestions) == 0 {
+            return "", errors.New("no suggestions to select")
+        }
+        fmt.Printf("%s\n%sCommit message suggestions (non-interactive mode):%s\n", cli.ColorGray, cli.ColorBold, cli.ColorReset)
+        for i, s := range suggestions {
+            fmt.Printf("  %s[%d]%s %s%s%s\n", cli.ColorYellow, i+1, cli.ColorReset, cli.ColorCyan, s, cli.ColorReset)
+        }
+        return suggestions[0], nil
+    }
+
+    // Limit display and selection to at most 10 (keys 1-9,0)
+    n := min(len(suggestions), 10)
+    if n == 0 {
+        return "", errors.New("no suggestions to select")
+    }
+
+    // If STDIN is not a TTY (e.g., piped input), fall back to simple Scanln to remain scriptable
+    if fi, err := os.Stdin.Stat(); err == nil && (fi.Mode()&os.ModeCharDevice) == 0 {
+        fmt.Printf("%s\n%s%s Commit message suggestions:%s\n", cli.ColorGray, cli.ColorBold, cli.IconInfo, cli.ColorReset)
+        for i := 0; i < n; i++ {
+            fmt.Printf("  %s[%d]%s %s%s%s\n", cli.ColorYellow, i+1, cli.ColorReset, cli.ColorCyan, suggestions[i], cli.ColorReset)
+        }
+        // Indicate 0 for tenth if applicable
+        rangeLabel := fmt.Sprintf("1-%d", n)
+        if n == 10 { rangeLabel = "1-9,0" }
+        fmt.Printf("\n%s%s Choose a commit message %s[%s]%s %s[default: 1]%s: %s", cli.ColorBold, cli.IconPrompt, cli.ColorYellow, rangeLabel, cli.ColorReset, cli.ColorDim, cli.ColorReset, cli.ColorCyan)
+        var choiceInput string
+        fmt.Scanln(&choiceInput)
+        selected := 1
+        if choiceInput != "" {
+            if choiceInput == "0" && n == 10 {
+                selected = 10
+            } else if v, err := strconv.Atoi(choiceInput); err == nil && v >= 1 && v <= n {
+                selected = v
+            }
+        }
+        fmt.Printf("%s", cli.ColorReset)
+        return suggestions[selected-1], nil
+    }
+
+    // Interactive TTY mode with single-key selection and arrow navigation
+    // Save current terminal settings and switch to non-canonical, no-echo mode (cbreak)
+    restore, err := enableCBreak()
+    if err != nil {
+        // Fallback to Scanln if terminal tweak fails
+        fmt.Printf("%s\n%s%s Commit message suggestions:%s\n", cli.ColorGray, cli.ColorBold, cli.IconInfo, cli.ColorReset)
+        for i := 0; i < n; i++ {
+            fmt.Printf("  %s[%d]%s %s%s%s\n", cli.ColorYellow, i+1, cli.ColorReset, cli.ColorCyan, suggestions[i], cli.ColorReset)
+        }
+        rangeLabel := fmt.Sprintf("1-%d", n)
+        if n == 10 { rangeLabel = "1-9,0" }
+        fmt.Printf("\n%s%s Choose a commit message %s[%s]%s %s[default: 1]%s: %s", cli.ColorBold, cli.IconPrompt, cli.ColorYellow, rangeLabel, cli.ColorReset, cli.ColorDim, cli.ColorReset, cli.ColorCyan)
+        var choiceInput string
+        fmt.Scanln(&choiceInput)
+        selected := 1
+        if choiceInput != "" {
+            if choiceInput == "0" && n == 10 {
+                selected = 10
+            } else if v, err := strconv.Atoi(choiceInput); err == nil && v >= 1 && v <= n {
+                selected = v
+            }
+        }
+        fmt.Printf("%s", cli.ColorReset)
+        return suggestions[selected-1], nil
+    }
+    defer restore()
+
+    selected := 0
+    render := func() {
+        // Header
+        fmt.Printf("%s\n%s%s Commit message suggestions:%s\n", cli.ColorGray, cli.ColorBold, cli.IconInfo, cli.ColorReset)
+        for i := 0; i < n; i++ {
+            idxLabel := fmt.Sprintf("%d", i+1)
+            if n == 10 && i == 9 { idxLabel = "0" }
+            prefix := "  "
+            lineColorStart := cli.ColorCyan
+            lineColorEnd := cli.ColorReset
+            if i == selected {
+                // Highlight selected line
+                prefix = fmt.Sprintf("%s> %s", cli.ColorYellow, cli.ColorReset)
+                lineColorStart = cli.ColorGreen + cli.ColorBold
+            }
+            fmt.Printf("%s[%s] %s%s%s\n", prefix, idxLabel, lineColorStart, suggestions[i], lineColorEnd)
+        }
+        // Instructions
+        fmt.Printf("%sUse ↑/↓ to navigate, numbers to select (1-9%s), Enter to confirm.%s\n", cli.ColorDim, func() string { if n == 10 { return ",0" }; return "" }(), cli.ColorReset)
+    }
+
+    // Initial render
+    render()
+
+    // Read keys and update selection; act immediately on number press
+    in := make([]byte, 3)
+    // lines printed after header: n + 2
+    backLines := n + 2
+    moveUp := func(lines int) { if lines > 0 { fmt.Printf("\033[%dA", lines) } }
+    clearLine := func() { fmt.Printf("\033[2K\r") }
+    for {
+        // Read one byte; handle escape sequences manually
+        _, err := os.Stdin.Read(in[:1])
+        if err != nil {
+            // On read error, just return current selection
+            break
+        }
+        b := in[0]
+        if b == 0 { continue }
+        switch b {
+        case 3: // Ctrl+C
+            return "", errors.New("selection canceled")
+        case '\r', '\n':
+            // Enter confirms
+            return suggestions[selected], nil
+        case 'k': // vim-like up (optional)
+            if selected > 0 { selected-- }
+        case 'j': // vim-like down (optional)
+            if selected < n-1 { selected++ }
+        case 27: // ESC sequence
+            // Read next two bytes if available for CSI
+            os.Stdin.Read(in[1:2])
+            if in[1] != '[' { continue }
+            os.Stdin.Read(in[2:3])
+            switch in[2] {
+            case 'A': // Up arrow
+                if selected > 0 { selected-- }
+            case 'B': // Down arrow
+                if selected < n-1 { selected++ }
+            }
+        default:
+            // Number keys: 1..9 select directly; 0 selects 10th when available
+            if b >= '1' && b <= '9' {
+                v := int(b - '0')
+                if v >= 1 && v <= n {
+                    return suggestions[v-1], nil
+                }
+            } else if b == '0' && n == 10 {
+                return suggestions[9], nil
+            }
+        }
+        // Re-render list in place
+        moveUp(backLines)
+        for i := 0; i < backLines; i++ { clearLine(); fmt.Printf("\n") }
+        moveUp(backLines)
+        render()
+    }
+    return suggestions[selected], nil
+}
+
+// enableCBreak switches terminal to non-canonical, no-echo mode using `stty` and returns a restore func.
+func enableCBreak() (func(), error) {
+    // Save current settings
+    save := exec.Command("stty", "-g")
+    save.Stdin = os.Stdin
+    state, err := save.Output()
+    if err != nil {
+        return func() {}, err
+    }
+    // Set to cbreak (non-canonical) and no-echo, return after 1 byte
+    set := exec.Command("stty", "-icanon", "-echo", "min", "1", "time", "0")
+    set.Stdin = os.Stdin
+    if err := set.Run(); err != nil {
+        return func() {}, err
+    }
+    restored := false
+    restore := func() {
+        if restored { return }
+        restored = true
+        cmd := exec.Command("stty", string(state))
+        cmd.Stdin = os.Stdin
+        _ = cmd.Run()
+    }
+    return restore, nil
 }
 
 // OfferCommit asks to commit or copy to clipboard.

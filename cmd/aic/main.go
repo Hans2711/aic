@@ -66,7 +66,7 @@ func buildHelp() string {
 	rows := [][2]string{
 		{"OPENAI_API_KEY", "(required) OpenAI API key"},
 		{"AIC_MODEL", "(optional) Model [default: gpt-4o-mini]"},
-		{"AIC_SUGGESTIONS", "(optional) Suggestions count 1-15 [default: 5]"},
+        {"AIC_SUGGESTIONS", "(optional) Suggestions count 1-10 [default: 5]"},
 		{"AIC_PROVIDER", "(optional) Provider [default: openai]"},
 		{"AIC_DEBUG", "(optional) Set to 1 for raw response debug"},
 		{"AIC_MOCK", "(optional) Set to 1 for mock suggestions (no API call)"},
