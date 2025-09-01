@@ -107,7 +107,9 @@ aic [-s "extra instruction"] [--version] [--no-color]
 Minimum:
 
 ```bash
-export OPENAI_API_KEY=sk-...  # required
+export OPENAI_API_KEY=sk-...  # required for OpenAI
+# or
+export CLAUDE_API_KEY=sk-...  # required for Claude
 aic
 ```
 
@@ -135,8 +137,9 @@ aic --version  # prints: aic master
 
 | Name / Flag          | Purpose |
 |----------------------|---------|
-| `OPENAI_API_KEY`     | (required) API key |
-| `AIC_MODEL`          | (optional) Model (default: gpt-4o-mini) |
+| `OPENAI_API_KEY`     | (required for provider=openai) API key |
+| `CLAUDE_API_KEY`     | (required for provider=claude) API key |
+| `AIC_MODEL`          | (optional) Model (provider default if unset) |
 | `AIC_SUGGESTIONS`    | (optional) Suggestions count 1–10 (default: 5) |
 | `AIC_PROVIDER`       | (optional) Provider (default: openai) |
 | `AIC_DEBUG`          | (optional) `1` for verbose raw response debug |
@@ -154,8 +157,9 @@ Usage:
 	aic [-s "extra instruction"] [--version] [--no-color]
 
 Arguments & Environment:
-	OPENAI_API_KEY        (required) OpenAI API key
-	AIC_MODEL             (optional) Model [default: gpt-4o-mini]
+        OPENAI_API_KEY        (required for provider=openai) OpenAI API key
+        CLAUDE_API_KEY        (required for provider=claude) Claude API key
+        AIC_MODEL             (optional) Model [provider default]
 	...
 	--version / -v        Show version and exit
 	--no-color            Disable colored output (alias: AIC_NO_COLOR=1)
@@ -169,20 +173,27 @@ Example:
 Use mock mode (fast, offline):
 
 ```bash
-AIC_MOCK=1 ./scripts/test_models.sh
+AIC_MOCK=1 ./scripts/test_openai_models.sh
 ```
 
-Real API (consumes tokens):
+Real OpenAI API (consumes tokens):
 
 ```bash
 export OPENAI_API_KEY=sk-...
-./scripts/test_models.sh
+./scripts/test_openai_models.sh
 ```
 
-Customize models:
+Customize OpenAI models:
 
 ```bash
-MODELS="gpt-4o-mini gpt-4o" ./scripts/test_models.sh
+MODELS="gpt-4o-mini gpt-4o" ./scripts/test_openai_models.sh
+```
+
+Test Claude models:
+
+```bash
+export CLAUDE_API_KEY=sk-...
+./scripts/test_claude_models.sh
 ```
 
 ## Large Diff Summarization Test

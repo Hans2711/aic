@@ -27,7 +27,7 @@ func TestLoadConfigBounds(t *testing.T) {
 	if cfg.Suggestions != defaultSuggestions {
 		t.Fatalf("expected default suggestions, got %d", cfg.Suggestions)
 	}
-	if cfg.Model != defaultModel {
+	if cfg.Model != defaultOpenAIModel {
 		t.Fatalf("expected default model, got %s", cfg.Model)
 	}
 }
