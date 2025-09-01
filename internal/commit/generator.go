@@ -28,7 +28,9 @@ type Config struct {
 
 func LoadConfig(systemAddition string) (Config, error) {
 	cfg := Config{Model: defaultModel, Suggestions: defaultSuggestions, SystemAddition: systemAddition}
-	if v := os.Getenv("AIC_MODEL"); v != "" { cfg.Model = v }
+	if v := os.Getenv("AIC_MODEL"); v != "" {
+		cfg.Model = v
+	}
 	// Alias: plain gpt-5 -> specific dated release name
 	if cfg.Model == "gpt-5" {
 		cfg.Model = "gpt-5-2025-08-07"
@@ -46,13 +48,21 @@ func GenerateSuggestions(cfg Config, apiKey string) ([]string, error) {
 	// Mock mode for testing without hitting real API (set AIC_MOCK=1)
 	if os.Getenv("AIC_MOCK") == "1" {
 		mock := []string{"feat: mock change", "fix: mock issue", "chore: update dependencies"}
-		if cfg.Suggestions > 0 && cfg.Suggestions < len(mock) { mock = mock[:cfg.Suggestions] }
+		if cfg.Suggestions > 0 && cfg.Suggestions < len(mock) {
+			mock = mock[:cfg.Suggestions]
+		}
 		return mock, nil
 	}
-	if apiKey == "" { return nil, errors.New("missing OPENAI_API_KEY") }
+	if apiKey == "" {
+		return nil, errors.New("missing OPENAI_API_KEY")
+	}
 	gitDiff, err := git.StagedDiff()
-	if err != nil { return nil, err }
-	if strings.TrimSpace(gitDiff) == "" { return nil, errors.New("no staged changes") }
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(gitDiff) == "" {
+		return nil, errors.New("no staged changes")
+	}
 
 	originalDiff := gitDiff
 	const hardLimit = 16000 // legacy safeguard / final truncation size for raw diff included in prompt
@@ -71,7 +81,9 @@ func GenerateSuggestions(cfg Config, apiKey string) ([]string, error) {
 			if !utf8.ValidString(gitDiff[:hardLimit]) {
 				// walk back to last rune boundary
 				cut := hardLimit
-				for cut > 0 && (gitDiff[cut] & 0xC0) == 0x80 { cut-- }
+				for cut > 0 && (gitDiff[cut]&0xC0) == 0x80 {
+					cut--
+				}
 				gitDiff = gitDiff[:cut]
 			} else {
 				gitDiff = gitDiff[:hardLimit]
@@ -90,36 +102,48 @@ func GenerateSuggestions(cfg Config, apiKey string) ([]string, error) {
 		"Given a git diff, generate distinct high-quality commit message suggestions (max 30 tokens each). " +
 		"Prioritize most impactful changes first; no line breaks within a message. " +
 		"Return ONLY the commit messages, one per choice, with no numbering or bullets."
-	if cfg.SystemAddition != "" { systemMsg += " Additional user instructions: " + cfg.SystemAddition }
+	if cfg.SystemAddition != "" {
+		systemMsg += " Additional user instructions: " + cfg.SystemAddition
+	}
 
 	client := openai.NewClient(apiKey)
 	temp := float32(0.4)
 	resp, err := client.Chat(openai.ChatCompletionRequest{
-		Model: cfg.Model,
-		Messages: []openai.Message{{Role: "system", Content: systemMsg}, {Role: "user", Content: userContent}},
-		MaxTokens: 256,
-		N: cfg.Suggestions,
+		Model:       cfg.Model,
+		Messages:    []openai.Message{{Role: "system", Content: systemMsg}, {Role: "user", Content: userContent}},
+		MaxTokens:   256,
+		N:           cfg.Suggestions,
 		Temperature: &temp,
 	})
-	if err != nil { return nil, err }
-	if len(resp.Choices) == 0 { return nil, errors.New("no choices returned") }
+	if err != nil {
+		return nil, err
+	}
+	if len(resp.Choices) == 0 {
+		return nil, errors.New("no choices returned")
+	}
 
 	suggestions := make([]string, 0, len(resp.Choices))
 	for _, c := range resp.Choices {
 		msg := strings.TrimSpace(c.Message.Content)
-		if msg == "" { continue }
+		if msg == "" {
+			continue
+		}
 		lines := []string{msg}
 		if strings.Contains(msg, "\n") {
 			lines = []string{}
 			for _, line := range strings.Split(msg, "\n") {
 				line = strings.TrimSpace(line)
-				if line == "" { continue }
+				if line == "" {
+					continue
+				}
 				lines = append(lines, line)
 			}
 		}
 		for _, ln := range lines {
 			ln = cli.StripLeadingListMarker(ln)
-			if ln == "" { continue }
+			if ln == "" {
+				continue
+			}
 			suggestions = append(suggestions, ln)
 		}
 	}
@@ -142,35 +166,59 @@ func GenerateSuggestions(cfg Config, apiKey string) ([]string, error) {
 // It ALWAYS uses the providers default model (defaultModel constant) regardless of user override.
 // The output is intentionally compact: bullet-style high level file change descriptions + notable additions/removals.
 func summarizeDiff(apiKey, diff string) (string, error) {
-	if apiKey == "" { return "", errors.New("missing api key for summarization") }
+	if apiKey == "" {
+		return "", errors.New("missing api key for summarization")
+	}
 	client := openai.NewClient(apiKey)
 	// Light temperature for determinism
 	temp := float32(0.2)
 	// We cap tokens aggressively; summary should stay small.
 	req := openai.ChatCompletionRequest{
-		Model:  defaultModel, // enforce provider default model per requirement
+		Model: defaultModel, // enforce provider default model per requirement
 		Messages: []openai.Message{
-			{Role: "system", Content: "You summarize git diffs. Produce a concise overview: list each file (max 1 line) with nature of change (add/remove/modify/rename) and highlight any: API signature changes, new public functions, deleted functions, dependency/version changes, security related changes, configuration changes. After the list, include a short 'Key Impacts:' section (<=3 bullet lines). No commit messages, no speculation."},
-			{Role: "user", Content: diff[:min(len(diff), 48000)]}, // guard extremely huge diffs
+			{
+				Role:    "system",
+				Content: "You summarize git diffs. Produce a concise overview: list each file (max 1 line) with nature of change (add/remove/modify/rename) and highlight any: API signature changes, new public functions, deleted functions, dependency/version changes, security related changes, configuration changes. After the list, include a short 'Key Impacts:' section (<=3 bullet lines). No commit messages, no speculation.",
+			},
+			{
+				Role:    "user",
+				Content: firstNRunes(diff, 48000), // guard extremely huge diffs using rune count
+			},
 		},
-		MaxTokens: 384,
+		MaxTokens:   384,
 		Temperature: &temp,
 	}
 	resp, err := client.Chat(req)
-	if err != nil { return "", err }
-	if resp == nil || len(resp.Choices) == 0 { return "", errors.New("empty summary response") }
+	if err != nil {
+		return "", err
+	}
+	if resp == nil || len(resp.Choices) == 0 {
+		return "", errors.New("empty summary response")
+	}
 	out := strings.TrimSpace(resp.Choices[0].Message.Content)
 	return out, nil
 }
 
-func min(a, b int) int { if a < b { return a }; return b }
+// firstNRunes returns at most n runes from the input string.
+// It ensures any truncation occurs on rune boundaries so the result is valid UTF-8.
+func firstNRunes(s string, n int) string {
+	r := []rune(s)
+	if len(r) > n {
+		r = r[:n]
+	}
+	return string(r)
+}
 
 // composeUserContent builds the final user prompt content with optional summary and truncated diff markers.
 // originalDiff: full diff (possibly large), truncatedDiff: trimmed part actually included, summary: optional summary.
 func composeUserContent(originalDiff, truncatedDiff, summary string) string {
-	if summary == "" { return truncatedDiff }
+	if summary == "" {
+		return truncatedDiff
+	}
 	omitted := len(originalDiff) - len(truncatedDiff)
-	if omitted < 0 { omitted = 0 }
+	if omitted < 0 {
+		omitted = 0
+	}
 	cutoffNote := "[TRUNCATED: showing first " + strconv.Itoa(len(truncatedDiff)) + " of " + strconv.Itoa(len(originalDiff)) + " chars; omitted " + strconv.Itoa(omitted) + "]"
 	return "DIFF SUMMARY (model-generated)\n" + summary + "\n\n" + cutoffNote + "\n--- BEGIN TRUNCATED RAW DIFF ---\n" + truncatedDiff + "\n--- END TRUNCATED RAW DIFF ---\n" + cutoffNote
 }
@@ -179,9 +227,13 @@ func composeUserContent(originalDiff, truncatedDiff, summary string) string {
 func PromptUserSelect(suggestions []string) (string, error) {
 	// Non-interactive auto-select first suggestion if AIC_NON_INTERACTIVE=1
 	if os.Getenv("AIC_NON_INTERACTIVE") == "1" {
-		if len(suggestions) == 0 { return "", errors.New("no suggestions to select") }
+		if len(suggestions) == 0 {
+			return "", errors.New("no suggestions to select")
+		}
 		fmt.Printf("%s\n%sCommit message suggestions (non-interactive mode):%s\n", cli.ColorGray, cli.ColorBold, cli.ColorReset)
-		for i, s := range suggestions { fmt.Printf("  %s[%d]%s %s%s%s\n", cli.ColorYellow, i+1, cli.ColorReset, cli.ColorCyan, s, cli.ColorReset) }
+		for i, s := range suggestions {
+			fmt.Printf("  %s[%d]%s %s%s%s\n", cli.ColorYellow, i+1, cli.ColorReset, cli.ColorCyan, s, cli.ColorReset)
+		}
 		return suggestions[0], nil
 	}
 	fmt.Printf("%s\n%s%s Commit message suggestions:%s\n", cli.ColorGray, cli.ColorBold, cli.IconInfo, cli.ColorReset)
@@ -193,7 +245,9 @@ func PromptUserSelect(suggestions []string) (string, error) {
 	fmt.Scanln(&choiceInput)
 	selected := 1
 	if choiceInput != "" {
-		if v, err := strconv.Atoi(choiceInput); err == nil && v >= 1 && v <= len(suggestions) { selected = v }
+		if v, err := strconv.Atoi(choiceInput); err == nil && v >= 1 && v <= len(suggestions) {
+			selected = v
+		}
 	}
 	fmt.Printf("%s", cli.ColorReset)
 	return suggestions[selected-1], nil
