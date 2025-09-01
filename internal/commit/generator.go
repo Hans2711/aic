@@ -1,17 +1,18 @@
 package commit
 
 import (
-	"errors"
-	"fmt"
-	"os"
-	"os/exec"
-	"strconv"
-	"strings"
-	"unicode/utf8"
+    "errors"
+    "fmt"
+    "os"
+    "os/exec"
+    "strconv"
+    "strings"
+    "unicode/utf8"
 
-	"github.com/diesi/aic/internal/cli"
-	"github.com/diesi/aic/internal/git"
-	"github.com/diesi/aic/internal/openai"
+    "github.com/diesi/aic/internal/cli"
+    "github.com/diesi/aic/internal/config"
+    "github.com/diesi/aic/internal/git"
+    "github.com/diesi/aic/internal/openai"
 )
 
 const (
@@ -27,31 +28,28 @@ type Config struct {
 }
 
 func LoadConfig(systemAddition string) (Config, error) {
-	cfg := Config{Model: defaultModel, Suggestions: defaultSuggestions, SystemAddition: systemAddition}
-	if v := os.Getenv("AIC_MODEL"); v != "" {
-		cfg.Model = v
-	}
-	// Alias: plain gpt-5 -> specific dated release name
-	if cfg.Model == "gpt-5" {
-		cfg.Model = "gpt-5-2025-08-07"
-	}
-    if v := os.Getenv("AIC_SUGGESTIONS"); v != "" {
-        if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 10 { // sanity limit (max 10 for quick selection)
-            cfg.Suggestions = n
-        }
+    cfg := Config{Model: defaultModel, Suggestions: defaultSuggestions, SystemAddition: systemAddition}
+    if v := config.Get(config.EnvAICModel); v != "" {
+        cfg.Model = v
     }
-	return cfg, nil
+    // Alias: plain gpt-5 -> specific dated release name
+    if cfg.Model == "gpt-5" {
+        cfg.Model = "gpt-5-2025-08-07"
+    }
+    // sanity limit (max 10 for quick selection)
+    cfg.Suggestions = config.IntInRange(config.EnvAICSuggestions, cfg.Suggestions, 1, 10)
+    return cfg, nil
 }
 
 // GenerateSuggestions creates commit message suggestions based on staged diff.
 func GenerateSuggestions(cfg Config, apiKey string) ([]string, error) {
-	// Mock mode for testing without hitting real API (set AIC_MOCK=1)
-	if os.Getenv("AIC_MOCK") == "1" {
-		mock := []string{"feat: mock change", "fix: mock issue", "chore: update dependencies"}
-		if cfg.Suggestions > 0 && cfg.Suggestions < len(mock) {
-			mock = mock[:cfg.Suggestions]
-		}
-		return mock, nil
+    // Mock mode for testing without hitting real API (set AIC_MOCK=1)
+    if config.Bool(config.EnvAICMock) {
+        mock := []string{"feat: mock change", "fix: mock issue", "chore: update dependencies"}
+        if cfg.Suggestions > 0 && cfg.Suggestions < len(mock) {
+            mock = mock[:cfg.Suggestions]
+        }
+        return mock, nil
 	}
 	if apiKey == "" {
 		return nil, errors.New("missing OPENAI_API_KEY")
@@ -89,11 +87,11 @@ func GenerateSuggestions(cfg Config, apiKey string) ([]string, error) {
 				gitDiff = gitDiff[:hardLimit]
 			}
 		}
-		if summary != "" && os.Getenv("AIC_DEBUG_SUMMARY") == "1" {
-			fmt.Fprintf(os.Stderr, "%s\n[debug] diff summarized (orig=%d chars, shown=%d)\n%s\n", cli.ColorDim, len(originalDiff), len(gitDiff), cli.ColorReset)
-			fmt.Fprintf(os.Stderr, "===== DIFF SUMMARY DEBUG START =====\n%s\n===== DIFF SUMMARY DEBUG END =====\n", summary)
-		}
-	}
+        if summary != "" && config.Bool(config.EnvAICDebugSummary) {
+            fmt.Fprintf(os.Stderr, "%s\n[debug] diff summarized (orig=%d chars, shown=%d)\n%s\n", cli.ColorDim, len(originalDiff), len(gitDiff), cli.ColorReset)
+            fmt.Fprintf(os.Stderr, "===== DIFF SUMMARY DEBUG START =====\n%s\n===== DIFF SUMMARY DEBUG END =====\n", summary)
+        }
+    }
 
 	// Compose user content: include summary (if any) plus truncated diff.
 	userContent := composeUserContent(originalDiff, gitDiff, summary)
@@ -148,13 +146,13 @@ func GenerateSuggestions(cfg Config, apiKey string) ([]string, error) {
 		}
 	}
 	// If we still have no suggestions, include snippet of raw response for context.
-	if len(suggestions) == 0 {
-		errMsg := "empty suggestions after processing"
-		if os.Getenv("AIC_DEBUG") == "1" && resp != nil && resp.Raw != "" {
-			errMsg = fmt.Sprintf("%s\n\nRaw Response:\n%s", errMsg, resp.Raw)
-		}
-		return nil, errors.New(errMsg)
-	}
+    if len(suggestions) == 0 {
+        errMsg := "empty suggestions after processing"
+        if config.Bool(config.EnvAICDebug) && resp != nil && resp.Raw != "" {
+            errMsg = fmt.Sprintf("%s\n\nRaw Response:\n%s", errMsg, resp.Raw)
+        }
+        return nil, errors.New(errMsg)
+    }
 	// Trim to requested number if model returned more.
 	if len(suggestions) > cfg.Suggestions {
 		suggestions = suggestions[:cfg.Suggestions]
@@ -232,7 +230,7 @@ func composeUserContent(originalDiff, truncatedDiff, summary string) string {
 // PromptUserSelect lets the user choose a suggestion.
 func PromptUserSelect(suggestions []string) (string, error) {
     // Non-interactive auto-select first suggestion if AIC_NON_INTERACTIVE=1
-    if os.Getenv("AIC_NON_INTERACTIVE") == "1" {
+    if config.Bool(config.EnvAICNonInteractive) {
         if len(suggestions) == 0 {
             return "", errors.New("no suggestions to select")
         }
@@ -414,7 +412,7 @@ func enableCBreak() (func(), error) {
 
 // termCols returns the terminal width in columns, falling back to env COLUMNS or 80.
 func termCols() int {
-    if v := os.Getenv("COLUMNS"); v != "" {
+    if v := config.Get(config.EnvColumns); v != "" {
         if n, err := strconv.Atoi(v); err == nil && n > 20 { return n }
     }
     return 80
@@ -434,14 +432,14 @@ func truncateRunes(s string, max int) string {
 // OfferCommit asks to commit or copy to clipboard.
 func OfferCommit(msg string) error {
 	fmt.Printf("\n%sSelected commit message:%s\n  %s%s%s\n", cli.ColorBold, cli.ColorReset, cli.ColorGreen, msg, cli.ColorReset)
-	if os.Getenv("AIC_NON_INTERACTIVE") == "1" {
-		// In CI/test mode, don't attempt to commit unless explicitly allowed
-		if os.Getenv("AIC_AUTO_COMMIT") == "1" {
-			cmd := exec.Command("git", "commit", "-m", msg)
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			return cmd.Run()
-		}
+    if config.Bool(config.EnvAICNonInteractive) {
+        // In CI/test mode, don't attempt to commit unless explicitly allowed
+        if config.Bool(config.EnvAICAutoCommit) {
+            cmd := exec.Command("git", "commit", "-m", msg)
+            cmd.Stdout = os.Stdout
+            cmd.Stderr = os.Stderr
+            return cmd.Run()
+        }
 		fmt.Printf("Non-interactive mode: skipping commit (set AIC_AUTO_COMMIT=1 to enable).\n")
 		return nil
 	}

@@ -1,8 +1,10 @@
 package cli
 
 import (
-	"os"
-	"strings"
+    "os"
+    "strings"
+
+    "github.com/diesi/aic/internal/config"
 )
 
 var (
@@ -31,11 +33,11 @@ func init() {
 }
 
 func disableColor() bool {
-	if os.Getenv("AIC_NO_COLOR") != "" || os.Getenv("NO_COLOR") != "" { return true }
-	fi, err := os.Stdout.Stat()
-	if err != nil { return false }
-	// if not a character device assume no color
-	return (fi.Mode() & os.ModeCharDevice) == 0 || strings.Contains(strings.ToLower(os.Getenv("TERM")), "dumb")
+    if config.Get(config.EnvAICNoColor) != "" || config.Get(config.EnvNoColor) != "" { return true }
+    fi, err := os.Stdout.Stat()
+    if err != nil { return false }
+    // if not a character device assume no color
+    return (fi.Mode() & os.ModeCharDevice) == 0 || strings.Contains(strings.ToLower(config.Get(config.EnvTerm)), "dumb")
 }
 
 // DisableColors can be called at runtime (e.g., for --no-color flag) to clear all escape codes.

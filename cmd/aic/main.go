@@ -1,20 +1,24 @@
 package main
 
 import (
-	"fmt"
-	"os"
-	"strings"
-	"time"
+    "fmt"
+    "os"
+    "strings"
+    "time"
 
-	"github.com/diesi/aic/internal/cli"
-	"github.com/diesi/aic/internal/commit"
-	"github.com/diesi/aic/internal/version"
+    "github.com/diesi/aic/internal/cli"
+    "github.com/diesi/aic/internal/commit"
+    "github.com/diesi/aic/internal/config"
+    "github.com/diesi/aic/internal/version"
 )
 
 func main() {
-	// Environment variables are used directly; no .env file loading.
-	var systemAddition string
-	args := os.Args[1:]
+    // Environment variables are used directly; no .env file loading.
+    var systemAddition string
+    args := os.Args[1:]
+
+    // Soft warning for unknown/unused AIC_* variables to catch typos/misconfig
+    config.WarnUnknownAICEnv()
 
 	// Simple flag parsing
 	for i, arg := range args {
@@ -44,15 +48,15 @@ func main() {
 		fatal(err)
 	}
 
-	stop := cli.Spinner(fmt.Sprintf("Requesting %d suggestions from %s", cfg.Suggestions, cfg.Model))
-	suggestions, err := commit.GenerateSuggestions(cfg, os.Getenv("OPENAI_API_KEY"))
+    stop := cli.Spinner(fmt.Sprintf("Requesting %d suggestions from %s", cfg.Suggestions, cfg.Model))
+    suggestions, err := commit.GenerateSuggestions(cfg, config.Get(config.EnvOpenAIAPIKey))
 	stop(err == nil)
 	if err != nil {
-		if isInvalidKeyErr(err) {
-			fmt.Fprintln(os.Stderr, "Hint: Ensure your real OPENAI_API_KEY is exported (export OPENAI_API_KEY=sk-...)")
-		}
-		fatal(err)
-	}
+        if isInvalidKeyErr(err) {
+            fmt.Fprintln(os.Stderr, "Hint: Ensure your real OPENAI_API_KEY is exported (export OPENAI_API_KEY=sk-...)")
+        }
+        fatal(err)
+    }
 	msg, err := commit.PromptUserSelect(suggestions)
 	if err != nil {
 		fatal(err)
@@ -63,18 +67,18 @@ func main() {
 }
 
 func buildHelp() string {
-	rows := [][2]string{
-		{"OPENAI_API_KEY", "(required) OpenAI API key"},
-		{"AIC_MODEL", "(optional) Model [default: gpt-4o-mini]"},
+    rows := [][2]string{
+        {"OPENAI_API_KEY", "(required) OpenAI API key"},
+        {"AIC_MODEL", "(optional) Model [default: gpt-4o-mini]"},
         {"AIC_SUGGESTIONS", "(optional) Suggestions count 1-10 [default: 5]"},
-		{"AIC_PROVIDER", "(optional) Provider [default: openai]"},
-		{"AIC_DEBUG", "(optional) Set to 1 for raw response debug"},
-		{"AIC_MOCK", "(optional) Set to 1 for mock suggestions (no API call)"},
-		{"AIC_NON_INTERACTIVE", "(optional) 1 to auto-select first suggestion & skip commit"},
-		{"AIC_AUTO_COMMIT", "(optional) With NON_INTERACTIVE=1, also perform the commit"},
-		{"--version / -v", "Show version and exit"},
-		{"--no-color", "Disable colored output (alias: AIC_NO_COLOR=1)"},
-	}
+        {"AIC_PROVIDER", "(reserved) Not currently used"},
+        {"AIC_DEBUG", "(optional) Set to 1 for raw response debug"},
+        {"AIC_MOCK", "(optional) Set to 1 for mock suggestions (no API call)"},
+        {"AIC_NON_INTERACTIVE", "(optional) 1 to auto-select first suggestion & skip commit"},
+        {"AIC_AUTO_COMMIT", "(optional) With NON_INTERACTIVE=1, also perform the commit"},
+        {"--version / -v", "Show version and exit"},
+        {"--no-color", "Disable colored output (alias: AIC_NO_COLOR=1)"},
+    }
 	maxVar := 0
 	for _, r := range rows { if len(r[0]) > maxVar { maxVar = len(r[0]) } }
 	var b strings.Builder
@@ -123,10 +127,10 @@ func fatal(err error) {
 		for _, h := range hintLines { fmt.Fprintln(os.Stderr, "  "+h) }
 	}
 	// Provide debug env hint if user wants more
-	if os.Getenv("AIC_DEBUG") == "" {
-		fmt.Fprintf(os.Stderr, "  %s%s%s Set AIC_DEBUG=1 for verbose response details.%s\n", cli.ColorDim, cli.IconInfo, cli.ColorReset, cli.ColorReset)
-	}
-	os.Exit(1)
+    if !config.Bool(config.EnvAICDebug) {
+        fmt.Fprintf(os.Stderr, "  %s%s%s Set AIC_DEBUG=1 for verbose response details.%s\n", cli.ColorDim, cli.IconInfo, cli.ColorReset, cli.ColorReset)
+    }
+    os.Exit(1)
 }
 
 func isInvalidKeyErr(err error) bool {
