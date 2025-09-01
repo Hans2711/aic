@@ -6,7 +6,6 @@ APP_NAME="aic"
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 ROOT_OUT="${REPO_ROOT}/dist"
 GOFLAGS=${GOFLAGS:-""}
-VERSION=${VERSION:-"0.1.0"}
 
 # Ensure we have a writable module cache even if the system GOPATH is read-only
 GO_LOCAL_MODCACHE="${GO_LOCAL_MODCACHE:-$ROOT_OUT/.gomodcache}"
@@ -16,11 +15,6 @@ export GOMODCACHE="$GO_LOCAL_MODCACHE"
 export GOPATH="$GO_LOCAL_GOPATH"
 
 set -euo pipefail
-
-LDIMPORT="github.com/diesi/aic/internal/version.Version"
-LDFLAGS="-X ${LDIMPORT}=${VERSION}"
-
-echo "Building version: ${VERSION}" >&2
 
 # Pre-fetch modules into our local cache to avoid repeated network calls per target
 echo "Downloading modules into local cache ($GOMODCACHE)" >&2
@@ -33,7 +27,7 @@ build_target() {
 	local outfile="$outdir/$APP_NAME"
 	echo "Building ${APP_NAME} for ${goos}/${goarch} -> ${outfile}" >&2
     GOOS="$goos" GOARCH="$goarch" CGO_ENABLED=0 \
-        go build $GOFLAGS -ldflags "$LDFLAGS" -o "$outfile" ./cmd/aic
+        go build $GOFLAGS -o "$outfile" ./cmd/aic
 	echo "  Done." >&2
 }
 

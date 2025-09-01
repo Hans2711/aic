@@ -12,7 +12,7 @@ AI-assisted git commit message generator.
 - Non-interactive / CI mode (`AIC_NON_INTERACTIVE=1`) with optional auto commit (`AIC_AUTO_COMMIT=1`)
 - Mock mode (`AIC_MOCK=1`) for offline/local testing (no API calls)
 - `--no-color` flag (or `AIC_NO_COLOR=1`) to disable ANSI colors
-- `--version` / `-v` flag to print version
+- `--version` / `-v` flag to print label (always "master")
 - Multi-select + combine: interactively press Space to select multiple suggestions, then Enter to ask the AI to combine them into a fresh set (defaults to 5) of improved suggestions. Repeat as needed, then pick one.
 - Automatic rich diff summarization when the staged diff exceeds ~16k characters:
 	- Uses the provider's default model (ignores `AIC_MODEL` override for the summary step)
@@ -23,7 +23,7 @@ AI-assisted git commit message generator.
 ## Install / Build
 
 ```bash
-./scripts/build.sh
+bash scripts/build.sh
 ```
 
 Binary output: `dist/aic`
@@ -46,10 +46,10 @@ dist/mac-intel/aic     # macOS amd64 (Intel)
 dist/checksums.txt     # SHA256 sums
 ```
 
-Build all targets with version injection:
+Build all targets (multi-platform binaries are produced):
 
 ```bash
-VERSION=0.1.1 ./scripts/build.sh
+./scripts/build.sh
 ```
 
 ### Installation (Preferred Symlink)
@@ -57,8 +57,8 @@ VERSION=0.1.1 ./scripts/build.sh
 `scripts/install.sh` creates a symlink: `/usr/local/bin/aic -> <repo>/dist/<platform>/aic` so you can update by rebuilding in-place (no /opt usage).
 
 ```bash
-./scripts/build.sh
-sudo ./scripts/install.sh   # creates /usr/local/bin/aic symlink
+bash scripts/build.sh
+sudo bash scripts/install.sh   # creates /usr/local/bin/aic symlink
 aic --version
 ```
 
@@ -125,10 +125,10 @@ aic --no-color
 export AIC_NO_COLOR=1; aic
 ```
 
-Show version:
+Show version label (always "master"):
 
 ```bash
-aic --version
+aic --version  # prints: aic master
 ```
 
 ### Environment / Flags Matrix
@@ -214,7 +214,7 @@ export AIC_DEBUG_SUMMARY=1
 - For large diffs the raw diff portion is truncated to ~16k chars after generating a summary; a cutoff note shows omitted size.
 - If summarization request fails, fallback is a plain truncation (legacy behavior).
 - Suggestions limited to 10 for quick single-key selection (1–9,0).
-- Version is embedded at build (override with: `go build -ldflags "-X github.com/diesi/aic/internal/version.Version=0.1.1"`).
+- Version label is fixed to "master" by design (no semantic versioning).
 
 ## Roadmap Ideas
 

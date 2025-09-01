@@ -1,4 +1,0 @@
-AIC test seed
-model gpt-4o-mini change 1756725803
-model gpt-4o change 1756725805
-model gpt-5-2025-08-07 change 1756725807

@@ -1,6 +1,7 @@
 package version
 
-// Version is set at build time via -ldflags if desired.
-var Version = "0.1.0"
+// Version is a static label for this project.
+// Per project policy, this is always "master" and is not overridden at build time.
+const Version = "master"
 
 func Get() string { return Version }
