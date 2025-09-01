@@ -26,6 +26,59 @@ Optionally place it in your PATH:
 
 ```bash
 sudo mv dist/aic /usr/local/bin/
+### Multi-platform Builds
+
+The build script now produces platform-specific binaries:
+
+```
+dist/ubuntu/aic        # linux/amd64
+dist/ubuntu-arm64/aic  # linux/arm64
+dist/mac/aic           # macOS arm64 (Apple Silicon)
+dist/mac-intel/aic     # macOS amd64 (Intel)
+dist/checksums.txt     # SHA256 sums
+```
+
+Build all targets with version injection:
+
+```bash
+VERSION=0.1.1 ./scripts/build.sh
+```
+
+### Installation (Preferred Symlink)
+
+Creates a versioned copy under `/opt/aic/<version>/<platform>/aic` and a symlink `/usr/local/bin/aic`.
+
+```bash
+./scripts/build.sh
+sudo ./scripts/install.sh
+aic --version
+```
+
+If you lack permissions, it installs to `~/.local/bin/aic` (ensure that is in your PATH).
+
+### Checksums
+
+After building, verify integrity:
+
+```bash
+./scripts/verify.sh
+```
+
+Or manually:
+
+```bash
+sha256sum dist/ubuntu/aic
+grep ubuntu/aic dist/checksums.txt
+```
+
+### macOS Note
+
+If macOS Gatekeeper blocks the binary, you may need:
+
+```bash
+xattr -d com.apple.quarantine /usr/local/bin/aic 2>/dev/null || true
+```
+
 ```
 
 ## Usage
