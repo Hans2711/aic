@@ -39,10 +39,22 @@ type Config struct {
 }
 
 func LoadConfig(systemAddition string) (Config, error) {
-	providerName := strings.ToLower(config.Get(config.EnvAICProvider))
-	if providerName == "" {
-		providerName = "openai"
-	}
+    providerName := strings.ToLower(config.Get(config.EnvAICProvider))
+    if providerName == "" {
+        // Auto-detect provider from available API keys when AIC_PROVIDER is unset.
+        // Priority when both are present: OpenAI.
+        hasOpenAI := strings.TrimSpace(config.Get(config.EnvOpenAIAPIKey)) != ""
+        hasClaude := strings.TrimSpace(config.Get(config.EnvClaudeAPIKey)) != ""
+        switch {
+        case hasOpenAI && hasClaude:
+            providerName = "openai"
+        case hasClaude:
+            providerName = "claude"
+        default:
+            // Fall back to OpenAI if neither key is set; error handling later will guide the user.
+            providerName = "openai"
+        }
+    }
 	cfg := Config{Provider: providerName, Model: defaultModelFor(providerName), Suggestions: defaultSuggestions, SystemAddition: systemAddition}
 	if v := config.Get(config.EnvAICModel); v != "" {
 		cfg.Model = v

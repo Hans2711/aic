@@ -5,7 +5,7 @@ AI-assisted git commit message generator with recursive suggestion combining and
 ## Key Features
 
 - Recursive combine loop: select multiple drafts, press Enter to have the AI synthesize improved alternatives, then iterate until you’re happy. This can be repeated recursively to converge on a great message.
-- OpenAI and Claude: plug in either provider by setting `AIC_PROVIDER=openai|claude` with the matching API key. Defaults to OpenAI.
+- OpenAI and Claude: plug in either provider by setting `AIC_PROVIDER=openai|claude` with the matching API key. If `AIC_PROVIDER` is unset, the provider is auto-detected from your API keys (both set -> uses OpenAI).
 - Smart defaults: OpenAI model `gpt-4o-mini`; Claude model `claude-3-sonnet-20240229`. Override with `AIC_MODEL`.
 - Interactive UX: single-key choice (1–9,0), arrow navigation, Space to multi-select, and consistent symbols (✓ success, ✗ error, ➤ prompt, ℹ info).
 - CI-friendly: non-interactive mode (`AIC_NON_INTERACTIVE=1`) with optional auto-commit (`AIC_AUTO_COMMIT=1`).
@@ -91,7 +91,7 @@ aic [-s "extra instruction"] [--version] [--no-color]
 Minimum setup (choose a provider):
 
 ```bash
-export OPENAI_API_KEY=sk-...          # for OpenAI (default AIC_PROVIDER)
+export OPENAI_API_KEY=sk-...          # for OpenAI (auto-detected if set)
 # or
 export CLAUDE_API_KEY=sk-...          # for Claude
 aic
@@ -127,7 +127,7 @@ aic --version  # prints: aic master
 
 Provider and model:
 
-- `AIC_PROVIDER` (default: `openai`): choose `openai` or `claude`.
+- `AIC_PROVIDER`: choose `openai` or `claude`. If unset, the tool auto-detects the provider from available API keys (`OPENAI_API_KEY`/`CLAUDE_API_KEY`). If both are set, OpenAI is used.
 - `OPENAI_API_KEY`: required when `AIC_PROVIDER=openai`.
 - `CLAUDE_API_KEY`: required when `AIC_PROVIDER=claude`.
 - `AIC_MODEL`: override model; defaults depend on provider:
