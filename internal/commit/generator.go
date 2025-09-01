@@ -42,6 +42,12 @@ func LoadConfig(systemAddition string) (Config, error) {
 
 // GenerateSuggestions creates commit message suggestions based on staged diff.
 func GenerateSuggestions(cfg Config, apiKey string) ([]string, error) {
+	// Mock mode for testing without hitting real API (set AIC_MOCK=1)
+	if os.Getenv("AIC_MOCK") == "1" {
+		mock := []string{"feat: mock change", "fix: mock issue", "chore: update dependencies"}
+		if cfg.Suggestions > 0 && cfg.Suggestions < len(mock) { mock = mock[:cfg.Suggestions] }
+		return mock, nil
+	}
 	if apiKey == "" { return nil, errors.New("missing OPENAI_API_KEY") }
 	gitDiff, err := git.StagedDiff()
 	if err != nil { return nil, err }
@@ -103,22 +109,43 @@ func GenerateSuggestions(cfg Config, apiKey string) ([]string, error) {
 
 // PromptUserSelect lets the user choose a suggestion.
 func PromptUserSelect(suggestions []string) (string, error) {
-	fmt.Println("Commit message suggestions:")
-	for i, s := range suggestions { fmt.Printf("[%d] %s\n", i+1, s) }
-	fmt.Printf("\nChoose a commit message [1-%d] (default 1): ", len(suggestions))
+	// Non-interactive auto-select first suggestion if AIC_NON_INTERACTIVE=1
+	if os.Getenv("AIC_NON_INTERACTIVE") == "1" {
+		if len(suggestions) == 0 { return "", errors.New("no suggestions to select") }
+		fmt.Printf("%s\n%sCommit message suggestions (non-interactive mode):%s\n", cli.ColorGray, cli.ColorBold, cli.ColorReset)
+		for i, s := range suggestions { fmt.Printf("  %s[%d]%s %s%s%s\n", cli.ColorYellow, i+1, cli.ColorReset, cli.ColorCyan, s, cli.ColorReset) }
+		return suggestions[0], nil
+	}
+	fmt.Printf("%s\n%sCommit message suggestions:%s\n", cli.ColorGray, cli.ColorBold, cli.ColorReset)
+	for i, s := range suggestions {
+		fmt.Printf("  %s[%d]%s %s%s%s\n", cli.ColorYellow, i+1, cli.ColorReset, cli.ColorCyan, s, cli.ColorReset)
+	}
+	fmt.Printf("\n%sChoose a commit message %s[1-%d]%s (default %s1%s): %s", cli.ColorBold, cli.ColorYellow, len(suggestions), cli.ColorReset, cli.ColorYellow, cli.ColorReset, cli.ColorBold)
 	var choiceInput string
 	fmt.Scanln(&choiceInput)
 	selected := 1
 	if choiceInput != "" {
 		if v, err := strconv.Atoi(choiceInput); err == nil && v >= 1 && v <= len(suggestions) { selected = v }
 	}
+	fmt.Printf("%s", cli.ColorReset)
 	return suggestions[selected-1], nil
 }
 
 // OfferCommit asks to commit or copy to clipboard.
 func OfferCommit(msg string) error {
-	fmt.Printf("\nSelected commit message:\n%s\n", msg)
-	fmt.Printf("\nCommit with this message now? [Y|n]: ")
+	fmt.Printf("\n%sSelected commit message:%s\n  %s%s%s\n", cli.ColorBold, cli.ColorReset, cli.ColorGreen, msg, cli.ColorReset)
+	if os.Getenv("AIC_NON_INTERACTIVE") == "1" {
+		// In CI/test mode, don't attempt to commit unless explicitly allowed
+		if os.Getenv("AIC_AUTO_COMMIT") == "1" {
+			cmd := exec.Command("git", "commit", "-m", msg)
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			return cmd.Run()
+		}
+		fmt.Printf("Non-interactive mode: skipping commit (set AIC_AUTO_COMMIT=1 to enable).\n")
+		return nil
+	}
+	fmt.Printf("\n%sCommit with this message now?%s %s[Y|n]: %s", cli.ColorBold, cli.ColorReset, cli.ColorYellow, cli.ColorReset)
 	var commitChoice string
 	fmt.Scanln(&commitChoice)
 	if strings.ToLower(commitChoice) == "y" || commitChoice == "" {
@@ -132,7 +159,7 @@ func OfferCommit(msg string) error {
 		c := exec.Command("xclip", "-selection", "clipboard")
 		c.Stdin = strings.NewReader(msg)
 		_ = c.Run()
-		fmt.Println("Message copied to clipboard.")
+		fmt.Printf("%sMessage copied to clipboard.%s\n", cli.ColorGreen, cli.ColorReset)
 	}
 	return nil
 }
