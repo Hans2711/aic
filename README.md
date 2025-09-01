@@ -13,6 +13,11 @@ AI-assisted git commit message generator.
 - Mock mode (`AIC_MOCK=1`) for offline/local testing (no API calls)
 - `--no-color` flag (or `AIC_NO_COLOR=1`) to disable ANSI colors
 - `--version` / `-v` flag to print version
+- Automatic rich diff summarization when the staged diff exceeds ~16k characters:
+	- Uses the provider's default model (ignores `AIC_MODEL` override for the summary step)
+	- Produces a concise file/change impact overview + key impacts
+	- Appends a clearly marked truncated raw diff section with cutoff notes
+	- Retains legacy behavior (simple truncation) if summarization fails
 
 ## Install / Build
 
@@ -134,6 +139,7 @@ aic --version
 | `AIC_SUGGESTIONS`    | (optional) Suggestions count 1–15 (default: 5) |
 | `AIC_PROVIDER`       | (optional) Provider (default: openai) |
 | `AIC_DEBUG`          | (optional) `1` for verbose raw response debug |
+| `AIC_DEBUG_SUMMARY`  | (optional) `1` to print diff summary debug info when large diff summarization triggers |
 | `AIC_MOCK`           | (optional) `1` for mock suggestions (no API call) |
 | `AIC_NON_INTERACTIVE`| (optional) `1` auto-select first suggestion & skip prompt |
 | `AIC_AUTO_COMMIT`    | (optional) With NON_INTERACTIVE=1 also run `git commit` |
@@ -178,10 +184,34 @@ Customize models:
 MODELS="gpt-4o-mini gpt-4o" ./scripts/test_models.sh
 ```
 
+## Large Diff Summarization Test
+
+Validate summarization behavior with a synthetic large diff (~50KB):
+
+Mock (no real API usage):
+
+```bash
+bash scripts/test_large_diff.sh
+```
+
+Real API (will consume tokens):
+
+```bash
+export OPENAI_API_KEY=sk-...
+REAL=1 bash scripts/test_large_diff.sh
+```
+
+Enable debug output for the summary step:
+
+```bash
+export AIC_DEBUG_SUMMARY=1
+```
+
 ## Limitations / Notes
 
 - Only OpenAI provider supported currently.
-- Diff truncated at ~16k chars for safety.
+- For large diffs the raw diff portion is truncated to ~16k chars after generating a summary; a cutoff note shows omitted size.
+- If summarization request fails, fallback is a plain truncation (legacy behavior).
 - Suggestions limited to 15 for usability.
 - Version is embedded at build (override with: `go build -ldflags "-X github.com/diesi/aic/internal/version.Version=0.1.1"`).
 
@@ -189,5 +219,4 @@ MODELS="gpt-4o-mini gpt-4o" ./scripts/test_models.sh
 
 - Support Anthropic / local providers via provider interface
 - Optional streaming output
-- Rich diff summarization step pre-prompt
 
