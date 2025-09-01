@@ -48,7 +48,7 @@ VERSION=0.1.1 ./scripts/build.sh
 
 ### Installation (Preferred Symlink)
 
-`scripts/install.sh` creates a symlink: `/usr/local/bin/aic -> <repo>/dist/<platform>/aic` so you can update by rebuilding in-place.
+`scripts/install.sh` creates a symlink: `/usr/local/bin/aic -> <repo>/dist/<platform>/aic` so you can update by rebuilding in-place (no /opt usage).
 
 ```bash
 ./scripts/build.sh
@@ -70,17 +70,16 @@ hash -r   # zsh/bash
 
 ### Checksums
 
-After building, verify integrity (SHA256):
+After building, verify integrity (SHA256) from repo root:
 
 ```bash
-./scripts/verify.sh
+./scripts/verify.sh          # uses dist/checksums.txt
 ```
 
-Or manually:
+Manual spot check:
 
 ```bash
-sha256sum dist/ubuntu/aic
-grep ubuntu/aic dist/checksums.txt
+sha256sum dist/ubuntu/aic | grep $(cut -d' ' -f1 dist/checksums.txt)
 ```
 
 ### macOS Note

@@ -41,6 +41,8 @@ CK_CMD=$(checksum_tool)
 if [ -n "$CK_CMD" ]; then
 	(
 		cd "$ROOT_OUT"
+	# Provide legacy single-path alias for tooling expecting dist/aic
+	if [ -f ubuntu/aic ] && [ ! -e aic ]; then ln -s ubuntu/aic aic; fi
 		rm -f checksums.txt
 		for f in $(find . -type f -name "$APP_NAME"); do
 			$CK_CMD "$f" >> checksums.txt

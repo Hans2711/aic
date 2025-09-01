@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/diesi/aic/internal/cli"
 	"github.com/diesi/aic/internal/git"
@@ -52,8 +53,43 @@ func GenerateSuggestions(cfg Config, apiKey string) ([]string, error) {
 	gitDiff, err := git.StagedDiff()
 	if err != nil { return nil, err }
 	if strings.TrimSpace(gitDiff) == "" { return nil, errors.New("no staged changes") }
-	// Basic truncation safeguard
-	if len(gitDiff) > 16000 { gitDiff = gitDiff[:16000] }
+
+	originalDiff := gitDiff
+	const hardLimit = 16000 // legacy safeguard / final truncation size for raw diff included in prompt
+	var summary string
+	if len(originalDiff) > hardLimit {
+		// Perform rich summarization using provider default model (ignores user override)
+		if s, sumErr := summarizeDiff(apiKey, originalDiff); sumErr == nil && strings.TrimSpace(s) != "" {
+			summary = s
+		} else {
+			// Fallback: no summary (will just truncate like before)
+			summary = ""
+		}
+		// Always truncate raw diff part after (optionally) obtaining summary to keep prompt bounded.
+		if len(gitDiff) > hardLimit {
+			// ensure we truncate on rune boundary to avoid broken UTF-8
+			if !utf8.ValidString(gitDiff[:hardLimit]) {
+				// walk back to last rune boundary
+				cut := hardLimit
+				for cut > 0 && (gitDiff[cut] & 0xC0) == 0x80 { cut-- }
+				gitDiff = gitDiff[:cut]
+			} else {
+				gitDiff = gitDiff[:hardLimit]
+			}
+		}
+		if summary != "" && os.Getenv("AIC_DEBUG_SUMMARY") == "1" {
+			fmt.Fprintf(os.Stderr, "%s\n[debug] diff summarized (orig=%d chars, shown=%d)\n%s\n", cli.ColorDim, len(originalDiff), len(gitDiff), cli.ColorReset)
+			fmt.Fprintf(os.Stderr, "===== DIFF SUMMARY DEBUG START =====\n%s\n===== DIFF SUMMARY DEBUG END =====\n", summary)
+		}
+	}
+
+	// Compose user content: include summary (if any) plus truncated diff.
+	userContent := gitDiff
+	if summary != "" {
+		omitted := len(originalDiff) - len(gitDiff)
+		cutoffNote := "[TRUNCATED: showing first " + strconv.Itoa(len(gitDiff)) + " of " + strconv.Itoa(len(originalDiff)) + " chars; omitted " + strconv.Itoa(omitted) + "]"
+		userContent = "DIFF SUMMARY (model-generated)\n" + summary + "\n\n" + cutoffNote + "\n--- BEGIN TRUNCATED RAW DIFF ---\n" + gitDiff + "\n--- END TRUNCATED RAW DIFF ---\n" + cutoffNote
+	}
 
 	systemMsg := "You are a helpful assistant that writes concise, conventional style Git commit messages. " +
 		"Given a git diff, generate distinct high-quality commit message suggestions (max 30 tokens each). " +
@@ -65,7 +101,7 @@ func GenerateSuggestions(cfg Config, apiKey string) ([]string, error) {
 	temp := float32(0.4)
 	resp, err := client.Chat(openai.ChatCompletionRequest{
 		Model: cfg.Model,
-		Messages: []openai.Message{{Role: "system", Content: systemMsg}, {Role: "user", Content: gitDiff}},
+		Messages: []openai.Message{{Role: "system", Content: systemMsg}, {Role: "user", Content: userContent}},
 		MaxTokens: 256,
 		N: cfg.Suggestions,
 		Temperature: &temp,
@@ -106,6 +142,33 @@ func GenerateSuggestions(cfg Config, apiKey string) ([]string, error) {
 	}
 	return suggestions, nil
 }
+
+// summarizeDiff creates a concise structured summary of a very large diff.
+// It ALWAYS uses the providers default model (defaultModel constant) regardless of user override.
+// The output is intentionally compact: bullet-style high level file change descriptions + notable additions/removals.
+func summarizeDiff(apiKey, diff string) (string, error) {
+	if apiKey == "" { return "", errors.New("missing api key for summarization") }
+	client := openai.NewClient(apiKey)
+	// Light temperature for determinism
+	temp := float32(0.2)
+	// We cap tokens aggressively; summary should stay small.
+	req := openai.ChatCompletionRequest{
+		Model:  defaultModel, // enforce provider default model per requirement
+		Messages: []openai.Message{
+			{Role: "system", Content: "You summarize git diffs. Produce a concise overview: list each file (max 1 line) with nature of change (add/remove/modify/rename) and highlight any: API signature changes, new public functions, deleted functions, dependency/version changes, security related changes, configuration changes. After the list, include a short 'Key Impacts:' section (<=3 bullet lines). No commit messages, no speculation."},
+			{Role: "user", Content: diff[:min(len(diff), 48000)]}, // guard extremely huge diffs
+		},
+		MaxTokens: 384,
+		Temperature: &temp,
+	}
+	resp, err := client.Chat(req)
+	if err != nil { return "", err }
+	if resp == nil || len(resp.Choices) == 0 { return "", errors.New("empty summary response") }
+	out := strings.TrimSpace(resp.Choices[0].Message.Content)
+	return out, nil
+}
+
+func min(a, b int) int { if a < b { return a }; return b }
 
 // PromptUserSelect lets the user choose a suggestion.
 func PromptUserSelect(suggestions []string) (string, error) {
