@@ -199,6 +199,11 @@ func summarizeDiff(apiKey, diff string) (string, error) {
 	return out, nil
 }
 
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 // firstNRunes returns at most n runes from the input string.
 // It ensures any truncation occurs on rune boundaries so the result is valid UTF-8.
 func firstNRunes(s string, n int) string {
@@ -276,12 +281,42 @@ func OfferCommit(msg string) error {
 		cmd.Stderr = os.Stderr
 		return cmd.Run()
 	}
-	// best-effort clipboard (Linux xclip, fallback no-op)
-	if _, err := exec.LookPath("xclip"); err == nil {
-		c := exec.Command("xclip", "-selection", "clipboard")
-		c.Stdin = strings.NewReader(msg)
-		_ = c.Run()
+	if copyToClipboard(msg) {
 		fmt.Printf("%sMessage copied to clipboard.%s\n", cli.ColorGreen, cli.ColorReset)
 	}
 	return nil
+}
+
+type clipboardTool struct {
+	name string
+	args []string
+}
+
+var clipboardTools = []clipboardTool{
+	{name: "pbcopy"},
+	{name: "wl-copy"},
+	{name: "xclip", args: []string{"-selection", "clipboard"}},
+	{name: "clip"},
+}
+
+// copyToClipboard tries a series of common clipboard tools until one succeeds.
+func copyToClipboard(msg string) bool {
+	run := func(name string, args ...string) error {
+		c := exec.Command(name, args...)
+		c.Stdin = strings.NewReader(msg)
+		return c.Run()
+	}
+	return tryClipboard(msg, exec.LookPath, run)
+}
+
+// tryClipboard attempts available clipboard tools using provided lookPath and run helpers.
+func tryClipboard(msg string, lookPath func(string) (string, error), run func(string, ...string) error) bool {
+	for _, t := range clipboardTools {
+		if _, err := lookPath(t.name); err == nil {
+			if run(t.name, t.args...) == nil {
+				return true
+			}
+		}
+	}
+	return false
 }
