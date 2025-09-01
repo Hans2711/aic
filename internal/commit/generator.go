@@ -200,10 +200,11 @@ func summarizeDiff(apiKey, diff string) (string, error) {
 }
 
 func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
+    if a < b {
+        return a
+    }
+    return b
+}
 // firstNRunes returns at most n runes from the input string.
 // It ensures any truncation occurs on rune boundaries so the result is valid UTF-8.
 func firstNRunes(s string, n int) string {
