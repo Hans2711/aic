@@ -22,10 +22,12 @@ AI-assisted git commit message generator.
 
 Binary output: `dist/aic`
 
-Optionally place it in your PATH:
+Optionally place it in your PATH (single-host quick method):
 
 ```bash
 sudo mv dist/aic /usr/local/bin/
+```
+
 ### Multi-platform Builds
 
 The build script now produces platform-specific binaries:
@@ -46,19 +48,29 @@ VERSION=0.1.1 ./scripts/build.sh
 
 ### Installation (Preferred Symlink)
 
-Creates a versioned copy under `/opt/aic/<version>/<platform>/aic` and a symlink `/usr/local/bin/aic`.
+`scripts/install.sh` creates a symlink: `/usr/local/bin/aic -> <repo>/dist/<platform>/aic` so you can update by rebuilding in-place.
 
 ```bash
 ./scripts/build.sh
-sudo ./scripts/install.sh
+sudo ./scripts/install.sh   # creates /usr/local/bin/aic symlink
 aic --version
 ```
 
-If you lack permissions, it installs to `~/.local/bin/aic` (ensure that is in your PATH).
+If you lack permissions for `/usr/local/bin`, it installs (or symlinks) to `~/.local/bin/aic`. Ensure that directory is in your `PATH`:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+If the shell still runs an old alias or cached command, clear with:
+
+```bash
+hash -r   # zsh/bash
+```
 
 ### Checksums
 
-After building, verify integrity:
+After building, verify integrity (SHA256):
 
 ```bash
 ./scripts/verify.sh
