@@ -8,6 +8,7 @@ import (
 
 	"github.com/diesi/aic/internal/cli"
 	"github.com/diesi/aic/internal/commit"
+	"github.com/diesi/aic/internal/version"
 )
 
 func main() {
@@ -18,8 +19,17 @@ func main() {
 	// Simple flag parsing
 	for i, arg := range args {
 		if arg == "-h" || arg == "--help" || arg == "help" {
-			printHelp()
+			fmt.Print(buildHelp())
 			return
+		}
+		if arg == "--version" || arg == "-v" {
+			fmt.Printf("aic %s\n", version.Get())
+			return
+		}
+		if arg == "--no-color" {
+			cli.DisableColors()
+			// remove the flag from further consideration
+			continue
 		}
 		if arg == "-s" {
 			if i+1 < len(args) {
@@ -52,8 +62,7 @@ func main() {
 	}
 }
 
-func printHelp() {
-	// Prepare aligned environment variable table. Two columns: VAR and description.
+func buildHelp() string {
 	rows := [][2]string{
 		{"OPENAI_API_KEY", "(required) OpenAI API key"},
 		{"AIC_MODEL", "(optional) Model [default: gpt-4o-mini]"},
@@ -63,32 +72,29 @@ func printHelp() {
 		{"AIC_MOCK", "(optional) Set to 1 for mock suggestions (no API call)"},
 		{"AIC_NON_INTERACTIVE", "(optional) 1 to auto-select first suggestion & skip commit"},
 		{"AIC_AUTO_COMMIT", "(optional) With NON_INTERACTIVE=1, also perform the commit"},
+		{"--version / -v", "Show version and exit"},
+		{"--no-color", "Disable colored output (alias: AIC_NO_COLOR=1)"},
 	}
 	maxVar := 0
 	for _, r := range rows { if len(r[0]) > maxVar { maxVar = len(r[0]) } }
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("%s%s aic%s – %sAI-assisted git commit message generator%s\n\n",
-		cli.ColorBold, cli.ColorCyan, cli.ColorReset, cli.ColorMagenta, cli.ColorReset))
+	b.WriteString(fmt.Sprintf("%s%s aic%s – %sAI-assisted git commit message generator%s\n\n", cli.ColorBold, cli.ColorCyan, cli.ColorReset, cli.ColorMagenta, cli.ColorReset))
 	b.WriteString(fmt.Sprintf("%sUsage%s:\n", cli.ColorBold, cli.ColorReset))
-	b.WriteString("  aic [-s \"extra instruction\"]\n\n")
+	b.WriteString("  aic [-s \"extra instruction\"] [--version] [--no-color]\n\n")
 	b.WriteString(fmt.Sprintf("%sDescription%s:\n", cli.ColorBold, cli.ColorReset))
 	b.WriteString("  Generates conventional Git commit messages based on your staged changes.\n")
 	b.WriteString("  It requests suggestions from an AI model, lets you choose one, then offers to commit.\n\n")
-	b.WriteString(fmt.Sprintf("%sArguments%s:\n", cli.ColorBold, cli.ColorReset))
-	b.WriteString(fmt.Sprintf("  %s-s%s <instruction>   Additional instruction, e.g. %s\"focus on backend\"%s\n\n",
-		cli.ColorYellow, cli.ColorReset, cli.ColorGreen, cli.ColorReset))
-	b.WriteString(fmt.Sprintf("%sEnvironment%s:\n", cli.ColorBold, cli.ColorReset))
+	b.WriteString(fmt.Sprintf("%sArguments & Environment%s:\n", cli.ColorBold, cli.ColorReset))
 	for _, r := range rows {
 		pad := strings.Repeat(" ", maxVar-len(r[0]))
 		color := cli.ColorCyan
 		if strings.Contains(r[1], "required") { color = cli.ColorRed }
-		// Each line: VAR (padded) two spaces then description
 		b.WriteString(fmt.Sprintf("  %s%s%s%s  %s%s%s\n", cli.ColorBold, r[0], cli.ColorReset, pad, color, r[1], cli.ColorReset))
 	}
 	b.WriteString("\n")
 	b.WriteString(fmt.Sprintf("%sExample%s:\n", cli.ColorBold, cli.ColorReset))
 	b.WriteString("  aic -s \"Refactor auth logic\"\n")
-	fmt.Print(b.String())
+	return b.String()
 }
 func fatal(err error) {
 	// Provide nicer categorized errors

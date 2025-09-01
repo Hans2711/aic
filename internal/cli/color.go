@@ -26,16 +26,7 @@ var (
 
 func init() {
 	if disableColor() {
-		ColorReset = ""
-		ColorBold = ""
-		ColorDim = ""
-		ColorRed = ""
-		ColorGreen = ""
-		ColorYellow = ""
-		ColorBlue = ""
-		ColorMagenta = ""
-		ColorCyan = ""
-		ColorGray = ""
+		disableColors()
 	}
 }
 
@@ -45,4 +36,20 @@ func disableColor() bool {
 	if err != nil { return false }
 	// if not a character device assume no color
 	return (fi.Mode() & os.ModeCharDevice) == 0 || strings.Contains(strings.ToLower(os.Getenv("TERM")), "dumb")
+}
+
+// DisableColors can be called at runtime (e.g., for --no-color flag) to clear all escape codes.
+func DisableColors() { disableColors() }
+
+func disableColors() {
+	ColorReset = ""
+	ColorBold = ""
+	ColorDim = ""
+	ColorRed = ""
+	ColorGreen = ""
+	ColorYellow = ""
+	ColorBlue = ""
+	ColorMagenta = ""
+	ColorCyan = ""
+	ColorGray = ""
 }

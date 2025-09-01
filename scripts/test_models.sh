@@ -18,11 +18,23 @@ if [[ ! -x "$BIN" ]]; then
 fi
 
 ec=0
+TEST_FILE=".aic_model_test.txt"
+cleanup() {
+  git reset -q HEAD -- "$TEST_FILE" 2>/dev/null || true
+  rm -f "$TEST_FILE"
+}
+trap cleanup EXIT
+
+# Seed file so first iteration has content
+echo "AIC test seed" > "$TEST_FILE"
+git add "$TEST_FILE" 2>/dev/null || true
+
 for m in $MODELS; do
   echo "Testing model: $m"
-  AIC_MODEL="$m" AIC_SUGGESTIONS="$AIC_SUGGESTIONS" OPENAI_API_KEY="$OPENAI_API_KEY" \
-    git diff --cached --quiet || true # ensure command exists
-  if ! (AIC_MODEL="$m" AIC_SUGGESTIONS="$AIC_SUGGESTIONS" OPENAI_API_KEY="$OPENAI_API_KEY" "$BIN" aic <<< $'1\n n\n'); then
+  # Append a unique line per model so a fresh staged diff exists each loop.
+  echo "model $m change $(date +%s)" >> "$TEST_FILE"
+  git add "$TEST_FILE" 2>/dev/null || true
+  if ! (AIC_MODEL="$m" AIC_SUGGESTIONS="$AIC_SUGGESTIONS" OPENAI_API_KEY="$OPENAI_API_KEY" "$BIN" <<< $'1\n n\n'); then
     echo "Model $m test failed" >&2
     ec=1
   else
@@ -30,5 +42,5 @@ for m in $MODELS; do
   fi
   echo
   sleep 1
- done
+done
 exit $ec
