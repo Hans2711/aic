@@ -84,12 +84,7 @@ func GenerateSuggestions(cfg Config, apiKey string) ([]string, error) {
 	}
 
 	// Compose user content: include summary (if any) plus truncated diff.
-	userContent := gitDiff
-	if summary != "" {
-		omitted := len(originalDiff) - len(gitDiff)
-		cutoffNote := "[TRUNCATED: showing first " + strconv.Itoa(len(gitDiff)) + " of " + strconv.Itoa(len(originalDiff)) + " chars; omitted " + strconv.Itoa(omitted) + "]"
-		userContent = "DIFF SUMMARY (model-generated)\n" + summary + "\n\n" + cutoffNote + "\n--- BEGIN TRUNCATED RAW DIFF ---\n" + gitDiff + "\n--- END TRUNCATED RAW DIFF ---\n" + cutoffNote
-	}
+	userContent := composeUserContent(originalDiff, gitDiff, summary)
 
 	systemMsg := "You are a helpful assistant that writes concise, conventional style Git commit messages. " +
 		"Given a git diff, generate distinct high-quality commit message suggestions (max 30 tokens each). " +
@@ -169,6 +164,16 @@ func summarizeDiff(apiKey, diff string) (string, error) {
 }
 
 func min(a, b int) int { if a < b { return a }; return b }
+
+// composeUserContent builds the final user prompt content with optional summary and truncated diff markers.
+// originalDiff: full diff (possibly large), truncatedDiff: trimmed part actually included, summary: optional summary.
+func composeUserContent(originalDiff, truncatedDiff, summary string) string {
+	if summary == "" { return truncatedDiff }
+	omitted := len(originalDiff) - len(truncatedDiff)
+	if omitted < 0 { omitted = 0 }
+	cutoffNote := "[TRUNCATED: showing first " + strconv.Itoa(len(truncatedDiff)) + " of " + strconv.Itoa(len(originalDiff)) + " chars; omitted " + strconv.Itoa(omitted) + "]"
+	return "DIFF SUMMARY (model-generated)\n" + summary + "\n\n" + cutoffNote + "\n--- BEGIN TRUNCATED RAW DIFF ---\n" + truncatedDiff + "\n--- END TRUNCATED RAW DIFF ---\n" + cutoffNote
+}
 
 // PromptUserSelect lets the user choose a suggestion.
 func PromptUserSelect(suggestions []string) (string, error) {
