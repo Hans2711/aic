@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Basic test harness for Claude models. Adjust MODELS list via env or default.
-: "${MODELS:=claude-3-sonnet-20240229 claude-3-opus-20240229}"
+: "${MODELS:=claude-sonnet-4-20250514 claude-3-5-haiku-20241022}"
 : "${AIC_SUGGESTIONS:=2}"
 
 if [[ -z "${CLAUDE_API_KEY:-}" ]]; then
@@ -12,10 +12,9 @@ fi
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BIN="$ROOT_DIR/dist/aic"
-if [[ ! -x "$BIN" ]]; then
-  echo "Binary not built. Building..." >&2
-  "$ROOT_DIR/scripts/build.sh"
-fi
+# Always rebuild to ensure latest provider code is used.
+echo "Building latest aic binary..." >&2
+bash "$ROOT_DIR/scripts/build.sh" >/dev/null
 
 ec=0
 TEST_FILE=".aic_model_test.txt"
