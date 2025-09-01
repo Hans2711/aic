@@ -13,6 +13,7 @@ import (
     "github.com/diesi/aic/internal/config"
     "github.com/diesi/aic/internal/git"
     "github.com/diesi/aic/internal/openai"
+    xterm "golang.org/x/term"
 )
 
 const (
@@ -375,8 +376,10 @@ func PromptUserSelect(suggestions []string) (string, error) {
     }
     render := func() {
         cols := termCols()
-        // content prefix length estimate: "> " or two spaces + "[x] " ~ 6 chars
-        maxMsg := cols - 8
+        // Compute visible prefix width precisely: prefix (2) + "[d]" (3) + space (1) + "[ ]" (3) + space (1)
+        // idxLabel is one visible char (1..9 or 0 for 10th)
+        visiblePrefix := 2 + 3 + 1 + 3 + 1 // = 10
+        maxMsg := cols - visiblePrefix
         if maxMsg < 10 { maxMsg = 10 }
         // Header (single line, no leading blank line)
         fmt.Printf("%s%s %sCommit message suggestions:%s\n", cli.ColorGray, cli.ColorBold, cli.IconInfo, cli.ColorReset)
@@ -541,8 +544,34 @@ func enableCBreak() (func(), error) {
 
 // termCols returns the terminal width in columns, falling back to env COLUMNS or 80.
 func termCols() int {
+    // First choice: get size from the actual TTY we write to (stdout).
+    if xterm.IsTerminal(int(os.Stdout.Fd())) {
+        if width, _, err := xterm.GetSize(int(os.Stdout.Fd())); err == nil && width > 20 {
+            return width
+        }
+    }
+    // Second choice: query stdin TTY (often the same device during interactive selection).
+    if xterm.IsTerminal(int(os.Stdin.Fd())) {
+        if width, _, err := xterm.GetSize(int(os.Stdin.Fd())); err == nil && width > 20 {
+            return width
+        }
+    }
+    // Third: shell-provided COLUMNS env.
     if v := config.Get(config.EnvColumns); v != "" {
         if n, err := strconv.Atoi(v); err == nil && n > 20 { return n }
+    }
+    // Last resort: stty size if stdin is a TTY.
+    if fi, err := os.Stdin.Stat(); err == nil && (fi.Mode()&os.ModeCharDevice) != 0 {
+        cmd := exec.Command("stty", "size")
+        cmd.Stdin = os.Stdin
+        if out, err := cmd.Output(); err == nil {
+            parts := strings.Fields(strings.TrimSpace(string(out)))
+            if len(parts) == 2 {
+                if cols, err := strconv.Atoi(parts[1]); err == nil && cols > 20 {
+                    return cols
+                }
+            }
+        }
     }
     return 80
 }
