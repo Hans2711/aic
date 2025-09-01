@@ -55,3 +55,4 @@ Set MODELS to space separated list to test custom models.
 - Support Anthropic / local providers via interface
 - Add non-interactive mode for CI
 - Streaming output
+test change

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Basic test harness for available models. Adjust MODELS list via env or default.
-: "${MODELS:=gpt-4o-mini gpt-4o}"  # add more models if desired
+: "${MODELS:=gpt-4o-mini gpt-4o gpt-5-2025-08-07}"  # add more models if desired
 : "${AIC_SUGGESTIONS:=2}"          # keep it small for tests
 
 if [[ -z "${OPENAI_API_KEY:-}" ]]; then

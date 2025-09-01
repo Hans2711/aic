@@ -28,6 +28,10 @@ type Config struct {
 func LoadConfig(systemAddition string) (Config, error) {
 	cfg := Config{Model: defaultModel, Suggestions: defaultSuggestions, SystemAddition: systemAddition}
 	if v := os.Getenv("AIC_MODEL"); v != "" { cfg.Model = v }
+	// Alias: plain gpt-5 -> specific dated release name
+	if cfg.Model == "gpt-5" {
+		cfg.Model = "gpt-5-2025-08-07"
+	}
 	if v := os.Getenv("AIC_SUGGESTIONS"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 15 { // sanity limit
 			cfg.Suggestions = n
@@ -52,12 +56,13 @@ func GenerateSuggestions(cfg Config, apiKey string) ([]string, error) {
 	if cfg.SystemAddition != "" { systemMsg += " Additional user instructions: " + cfg.SystemAddition }
 
 	client := openai.NewClient(apiKey)
+	temp := float32(0.4)
 	resp, err := client.Chat(openai.ChatCompletionRequest{
 		Model: cfg.Model,
 		Messages: []openai.Message{{Role: "system", Content: systemMsg}, {Role: "user", Content: gitDiff}},
 		MaxTokens: 256,
 		N: cfg.Suggestions,
-		Temperature: 0.4,
+		Temperature: &temp,
 	})
 	if err != nil { return nil, err }
 	if len(resp.Choices) == 0 { return nil, errors.New("no choices returned") }
@@ -66,17 +71,33 @@ func GenerateSuggestions(cfg Config, apiKey string) ([]string, error) {
 	for _, c := range resp.Choices {
 		msg := strings.TrimSpace(c.Message.Content)
 		if msg == "" { continue }
-		if strings.Contains(msg, "\n") { // take first meaningful line if multiline
+		lines := []string{msg}
+		if strings.Contains(msg, "\n") {
+			lines = []string{}
 			for _, line := range strings.Split(msg, "\n") {
 				line = strings.TrimSpace(line)
 				if line == "" { continue }
-				line = cli.StripLeadingListMarker(line)
-				if line != "" { msg = line; break }
+				lines = append(lines, line)
 			}
-		} else { msg = cli.StripLeadingListMarker(msg) }
-		suggestions = append(suggestions, msg)
+		}
+		for _, ln := range lines {
+			ln = cli.StripLeadingListMarker(ln)
+			if ln == "" { continue }
+			suggestions = append(suggestions, ln)
+		}
 	}
-	if len(suggestions) == 0 { return nil, errors.New("empty suggestions after processing") }
+	// If we still have no suggestions, include snippet of raw response for context.
+	if len(suggestions) == 0 {
+		errMsg := "empty suggestions after processing"
+		if os.Getenv("AIC_DEBUG") == "1" && resp != nil && resp.Raw != "" {
+			errMsg = fmt.Sprintf("%s\n\nRaw Response:\n%s", errMsg, resp.Raw)
+		}
+		return nil, errors.New(errMsg)
+	}
+	// Trim to requested number if model returned more.
+	if len(suggestions) > cfg.Suggestions {
+		suggestions = suggestions[:cfg.Suggestions]
+	}
 	return suggestions, nil
 }
 
