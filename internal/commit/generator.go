@@ -176,8 +176,14 @@ func summarizeDiff(apiKey, diff string) (string, error) {
 	req := openai.ChatCompletionRequest{
 		Model: defaultModel, // enforce provider default model per requirement
 		Messages: []openai.Message{
-			{Role: "system", Content: "You summarize git diffs. Produce a concise overview: list each file (max 1 line) with nature of change (add/remove/modify/rename) and highlight any: API signature changes, new public functions, deleted functions, dependency/version changes, security related changes, configuration changes. After the list, include a short 'Key Impacts:' section (<=3 bullet lines). No commit messages, no speculation."},
-			{Role: "user", Content: diff[:min(len(diff), 48000)]}, // guard extremely huge diffs
+			{
+				Role:    "system",
+				Content: "You summarize git diffs. Produce a concise overview: list each file (max 1 line) with nature of change (add/remove/modify/rename) and highlight any: API signature changes, new public functions, deleted functions, dependency/version changes, security related changes, configuration changes. After the list, include a short 'Key Impacts:' section (<=3 bullet lines). No commit messages, no speculation.",
+			},
+			{
+				Role:    "user",
+				Content: firstNRunes(diff, 48000), // guard extremely huge diffs using rune count
+			},
 		},
 		MaxTokens:   384,
 		Temperature: &temp,
@@ -198,6 +204,14 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+// firstNRunes returns at most n runes from the input string.
+// It ensures any truncation occurs on rune boundaries so the result is valid UTF-8.
+func firstNRunes(s string, n int) string {
+	r := []rune(s)
+	if len(r) > n {
+		r = r[:n]
+	}
+	return string(r)
 }
 
 // composeUserContent builds the final user prompt content with optional summary and truncated diff markers.
