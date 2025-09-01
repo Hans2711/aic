@@ -1,24 +1,24 @@
 package main
 
 import (
-    "fmt"
-    "os"
-    "strings"
-    "time"
+	"fmt"
+	"os"
+	"strings"
+	"time"
 
-    "github.com/diesi/aic/internal/cli"
-    "github.com/diesi/aic/internal/commit"
-    "github.com/diesi/aic/internal/config"
-    "github.com/diesi/aic/internal/version"
+	"github.com/diesi/aic/internal/cli"
+	"github.com/diesi/aic/internal/commit"
+	"github.com/diesi/aic/internal/config"
+	"github.com/diesi/aic/internal/version"
 )
 
 func main() {
-    // Environment variables are used directly; no .env file loading.
-    var systemAddition string
-    args := os.Args[1:]
+	// Environment variables are used directly; no .env file loading.
+	var systemAddition string
+	args := os.Args[1:]
 
-    // Soft warning for unknown/unused AIC_* variables to catch typos/misconfig
-    config.WarnUnknownAICEnv()
+	// Soft warning for unknown/unused AIC_* variables to catch typos/misconfig
+	config.WarnUnknownAICEnv()
 
 	// Simple flag parsing
 	for i, arg := range args {
@@ -48,15 +48,25 @@ func main() {
 		fatal(err)
 	}
 
-    stop := cli.Spinner(fmt.Sprintf("Requesting %d suggestions from %s", cfg.Suggestions, cfg.Model))
-    suggestions, err := commit.GenerateSuggestions(cfg, config.Get(config.EnvOpenAIAPIKey))
+	stop := cli.Spinner(fmt.Sprintf("Requesting %d suggestions from %s", cfg.Suggestions, cfg.Model))
+	var apiKey string
+	if cfg.Provider == "claude" {
+		apiKey = config.Get(config.EnvClaudeAPIKey)
+	} else {
+		apiKey = config.Get(config.EnvOpenAIAPIKey)
+	}
+	suggestions, err := commit.GenerateSuggestions(cfg, apiKey)
 	stop(err == nil)
 	if err != nil {
-        if isInvalidKeyErr(err) {
-            fmt.Fprintln(os.Stderr, "Hint: Ensure your real OPENAI_API_KEY is exported (export OPENAI_API_KEY=sk-...)")
-        }
-        fatal(err)
-    }
+		if isInvalidKeyErr(err) {
+			if cfg.Provider == "claude" {
+				fmt.Fprintln(os.Stderr, "Hint: Ensure your real CLAUDE_API_KEY is exported (export CLAUDE_API_KEY=sk-...)")
+			} else {
+				fmt.Fprintln(os.Stderr, "Hint: Ensure your real OPENAI_API_KEY is exported (export OPENAI_API_KEY=sk-...)")
+			}
+		}
+		fatal(err)
+	}
 	msg, err := commit.PromptUserSelect(suggestions)
 	if err != nil {
 		fatal(err)
@@ -67,20 +77,25 @@ func main() {
 }
 
 func buildHelp() string {
-    rows := [][2]string{
-        {"OPENAI_API_KEY", "(required) OpenAI API key"},
-        {"AIC_MODEL", "(optional) Model [default: gpt-4o-mini]"},
-        {"AIC_SUGGESTIONS", "(optional) Suggestions count 1-10 [default: 5]"},
-        {"AIC_PROVIDER", "(reserved) Not currently used"},
-        {"AIC_DEBUG", "(optional) Set to 1 for raw response debug"},
-        {"AIC_MOCK", "(optional) Set to 1 for mock suggestions (no API call)"},
-        {"AIC_NON_INTERACTIVE", "(optional) 1 to auto-select first suggestion & skip commit"},
-        {"AIC_AUTO_COMMIT", "(optional) With NON_INTERACTIVE=1, also perform the commit"},
-        {"--version / -v", "Show version and exit"},
-        {"--no-color", "Disable colored output (alias: AIC_NO_COLOR=1)"},
-    }
+	rows := [][2]string{
+		{"OPENAI_API_KEY", "(required for provider=openai) OpenAI API key"},
+		{"CLAUDE_API_KEY", "(required for provider=claude) Claude API key"},
+		{"AIC_MODEL", "(optional) Model [default depends on provider]"},
+		{"AIC_SUGGESTIONS", "(optional) Suggestions count 1-10 [default: 5]"},
+		{"AIC_PROVIDER", "(optional) Provider [openai|claude] (default: openai)"},
+		{"AIC_DEBUG", "(optional) Set to 1 for raw response debug"},
+		{"AIC_MOCK", "(optional) Set to 1 for mock suggestions (no API call)"},
+		{"AIC_NON_INTERACTIVE", "(optional) 1 to auto-select first suggestion & skip commit"},
+		{"AIC_AUTO_COMMIT", "(optional) With NON_INTERACTIVE=1, also perform the commit"},
+		{"--version / -v", "Show version and exit"},
+		{"--no-color", "Disable colored output (alias: AIC_NO_COLOR=1)"},
+	}
 	maxVar := 0
-	for _, r := range rows { if len(r[0]) > maxVar { maxVar = len(r[0]) } }
+	for _, r := range rows {
+		if len(r[0]) > maxVar {
+			maxVar = len(r[0])
+		}
+	}
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("%s%s aic%s – %sAI-assisted git commit message generator%s\n\n", cli.ColorBold, cli.ColorCyan, cli.ColorReset, cli.ColorMagenta, cli.ColorReset))
 	b.WriteString(fmt.Sprintf("%sUsage%s:\n", cli.ColorBold, cli.ColorReset))
@@ -92,7 +107,9 @@ func buildHelp() string {
 	for _, r := range rows {
 		pad := strings.Repeat(" ", maxVar-len(r[0]))
 		color := cli.ColorCyan
-		if strings.Contains(r[1], "required") { color = cli.ColorRed }
+		if strings.Contains(r[1], "required") {
+			color = cli.ColorRed
+		}
 		b.WriteString(fmt.Sprintf("  %s%s%s%s  %s%s%s\n", cli.ColorBold, r[0], cli.ColorReset, pad, color, r[1], cli.ColorReset))
 	}
 	b.WriteString("\n")
@@ -113,6 +130,8 @@ func fatal(err error) {
 		hintLines = append(hintLines, fmt.Sprintf("%s%s%s Run %sgit init%s or cd into a repo.", cli.ColorYellow, cli.IconInfo, cli.ColorReset, cli.ColorGreen, cli.ColorReset))
 	case strings.Contains(lower, "missing openai_api_key"):
 		hintLines = append(hintLines, fmt.Sprintf("%s%s%s Export your key: %sexport OPENAI_API_KEY=sk-***%s", cli.ColorYellow, cli.IconInfo, cli.ColorReset, cli.ColorGreen, cli.ColorReset))
+	case strings.Contains(lower, "missing claude_api_key"):
+		hintLines = append(hintLines, fmt.Sprintf("%s%s%s Export your key: %sexport CLAUDE_API_KEY=sk-***%s", cli.ColorYellow, cli.IconInfo, cli.ColorReset, cli.ColorGreen, cli.ColorReset))
 	case isRateLimitErr(lower):
 		hintLines = append(hintLines, fmt.Sprintf("%s%s%s Rate limits; wait or lower suggestions (AIC_SUGGESTIONS=3).", cli.ColorYellow, cli.IconInfo, cli.ColorReset))
 	}
@@ -124,13 +143,15 @@ func fatal(err error) {
 	ts := time.Now().Format("15:04:05")
 	fmt.Fprintf(os.Stderr, "%s %s%s%s\n  %s%v%s\n", banner, cli.ColorDim, ts, cli.ColorReset, cli.ColorRed, msg, cli.ColorReset)
 	if len(hintLines) > 0 {
-		for _, h := range hintLines { fmt.Fprintln(os.Stderr, "  "+h) }
+		for _, h := range hintLines {
+			fmt.Fprintln(os.Stderr, "  "+h)
+		}
 	}
 	// Provide debug env hint if user wants more
-    if !config.Bool(config.EnvAICDebug) {
-        fmt.Fprintf(os.Stderr, "  %s%s%s Set AIC_DEBUG=1 for verbose response details.%s\n", cli.ColorDim, cli.IconInfo, cli.ColorReset, cli.ColorReset)
-    }
-    os.Exit(1)
+	if !config.Bool(config.EnvAICDebug) {
+		fmt.Fprintf(os.Stderr, "  %s%s%s Set AIC_DEBUG=1 for verbose response details.%s\n", cli.ColorDim, cli.IconInfo, cli.ColorReset, cli.ColorReset)
+	}
+	os.Exit(1)
 }
 
 func isInvalidKeyErr(err error) bool {
@@ -142,7 +163,9 @@ func isInvalidKeyErr(err error) bool {
 }
 
 func isRateLimitErr(s string) bool {
-	if s == "" { return false }
+	if s == "" {
+		return false
+	}
 	s = strings.ToLower(s)
 	return strings.Contains(s, "rate limit") || strings.Contains(s, "too many requests")
 }
