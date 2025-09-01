@@ -1,42 +1,35 @@
 # aic
 
-AI-assisted git commit message generator.
+AI-assisted git commit message generator with recursive suggestion combining and first-class OpenAI + Claude integration.
 
-## Features
+## Key Features
 
-- Generates N (configurable) commit message suggestions from OpenAI Chat Completions
-- Default model: `gpt-4o-mini` (override with `AIC_MODEL`)
-- Default suggestions: 5 (override with `AIC_SUGGESTIONS` 1–10)
-- Optional extra instruction via `-s "extra context"`
-- Interactive selection with clear defaults & consistent symbols (✓ success, ✗ error, ➤ prompt, ℹ info)
-- Non-interactive / CI mode (`AIC_NON_INTERACTIVE=1`) with optional auto commit (`AIC_AUTO_COMMIT=1`)
-- Mock mode (`AIC_MOCK=1`) for offline/local testing (no API calls)
-- `--no-color` flag (or `AIC_NO_COLOR=1`) to disable ANSI colors
-- `--version` / `-v` flag to print label (always "master")
-- Multi-select + combine: interactively press Space to select multiple suggestions, then Enter to ask the AI to combine them into a fresh set (defaults to 5) of improved suggestions. Repeat as needed, then pick one.
-- Automatic rich diff summarization when the staged diff exceeds ~16k characters:
-	- Uses the provider's default model (ignores `AIC_MODEL` override for the summary step)
-	- Produces a concise file/change impact overview + key impacts
-	- Appends a clearly marked truncated raw diff section with cutoff notes
-	- Retains legacy behavior (simple truncation) if summarization fails
+- Recursive combine loop: select multiple drafts, press Enter to have the AI synthesize improved alternatives, then iterate until you’re happy. This can be repeated recursively to converge on a great message.
+- OpenAI and Claude: plug in either provider by setting `AIC_PROVIDER=openai|claude` with the matching API key. Defaults to OpenAI.
+- Smart defaults: OpenAI model `gpt-4o-mini`; Claude model `claude-3-sonnet-20240229`. Override with `AIC_MODEL`.
+- Interactive UX: single-key choice (1–9,0), arrow navigation, Space to multi-select, and consistent symbols (✓ success, ✗ error, ➤ prompt, ℹ info).
+- CI-friendly: non-interactive mode (`AIC_NON_INTERACTIVE=1`) with optional auto-commit (`AIC_AUTO_COMMIT=1`).
+- Large diff support: when the diff is huge, the tool generates a compact, structured summary and includes a clearly marked, truncated raw diff with cutoff notes. If summarization fails, it gracefully falls back to simple truncation.
+- Local/mock mode: `AIC_MOCK=1` returns deterministic mock suggestions with no API calls.
+- Quality guardrails: requests the model to output plain, one-line conventional commit messages without numbering.
 
 ## Install / Build
+
+Quick build:
 
 ```bash
 bash scripts/build.sh
 ```
 
-Binary output: `dist/aic`
+Binary output:
 
-Optionally place it in your PATH (single-host quick method):
-
-```bash
-sudo mv dist/aic /usr/local/bin/
+```
+dist/aic
 ```
 
-### Multi-platform Builds
+### Multi-platform builds
 
-The build script now produces platform-specific binaries:
+The build script produces platform-specific binaries and checksums:
 
 ```
 dist/ubuntu/aic        # linux/amd64
@@ -46,56 +39,47 @@ dist/mac-intel/aic     # macOS amd64 (Intel)
 dist/checksums.txt     # SHA256 sums
 ```
 
-Build all targets (multi-platform binaries are produced):
+Build everything:
 
 ```bash
 ./scripts/build.sh
 ```
 
-### Installation (Preferred Symlink)
+### Installation (symlink preferred)
 
-`scripts/install.sh` creates a symlink: `/usr/local/bin/aic -> <repo>/dist/<platform>/aic` so you can update by rebuilding in-place (no /opt usage).
+Create a stable symlink so rebuilds update in place:
 
 ```bash
 bash scripts/build.sh
-sudo bash scripts/install.sh   # creates /usr/local/bin/aic symlink
-aic --version
+sudo bash scripts/install.sh   # creates /usr/local/bin/aic -> dist/<platform>/aic
+aic --version                  # prints: aic master
 ```
 
-If you lack permissions for `/usr/local/bin`, it installs (or symlinks) to `~/.local/bin/aic`. Ensure that directory is in your `PATH`:
+If `/usr/local/bin` is unavailable, it falls back to `~/.local/bin/aic`. Ensure it’s on `PATH`:
 
 ```bash
 export PATH="$HOME/.local/bin:$PATH"
+hash -r  # clear shell command cache if needed
 ```
 
-If the shell still runs an old alias or cached command, clear with:
+### Verify checksums
 
 ```bash
-hash -r   # zsh/bash
+./scripts/verify.sh           # validates dist/checksums.txt
 ```
 
-### Checksums
-
-After building, verify integrity (SHA256) from repo root:
-
-```bash
-./scripts/verify.sh          # uses dist/checksums.txt
-```
-
-Manual spot check:
+Manual spot-check:
 
 ```bash
 sha256sum dist/ubuntu/aic | grep $(cut -d' ' -f1 dist/checksums.txt)
 ```
 
-### macOS Note
+### macOS note
 
-If macOS Gatekeeper blocks the binary, you may need:
+Gatekeeper may require unquarantining the binary once:
 
 ```bash
 xattr -d com.apple.quarantine /usr/local/bin/aic 2>/dev/null || true
-```
-
 ```
 
 ## Usage
@@ -104,22 +88,22 @@ xattr -d com.apple.quarantine /usr/local/bin/aic 2>/dev/null || true
 aic [-s "extra instruction"] [--version] [--no-color]
 ```
 
-Minimum:
+Minimum setup (choose a provider):
 
 ```bash
-export OPENAI_API_KEY=sk-...  # required for OpenAI
+export OPENAI_API_KEY=sk-...          # for OpenAI (default AIC_PROVIDER)
 # or
-export CLAUDE_API_KEY=sk-...  # required for Claude
+export CLAUDE_API_KEY=sk-...          # for Claude
 aic
 ```
 
-Provide extra guidance to the model:
+Add extra guidance to the model:
 
 ```bash
 aic -s "Focus on auth refactor and database migrations"
 ```
 
-Disable color (scripted environments):
+Disable ANSI colors:
 
 ```bash
 aic --no-color
@@ -133,44 +117,48 @@ Show version label (always "master"):
 aic --version  # prints: aic master
 ```
 
-### Environment / Flags Matrix
+### Interactive selection and recursive combine
 
-| Name / Flag          | Purpose |
-|----------------------|---------|
-| `OPENAI_API_KEY`     | (required for provider=openai) API key |
-| `CLAUDE_API_KEY`     | (required for provider=claude) API key |
-| `AIC_MODEL`          | (optional) Model (provider default if unset) |
-| `AIC_SUGGESTIONS`    | (optional) Suggestions count 1–10 (default: 5) |
-| `AIC_PROVIDER`       | (optional) Provider (default: openai) |
-| `AIC_DEBUG`          | (optional) `1` for verbose raw response debug |
-| `AIC_DEBUG_SUMMARY`  | (optional) `1` to print diff summary debug info when large diff summarization triggers |
-| `AIC_MOCK`           | (optional) `1` for mock suggestions (no API call) |
-| `AIC_NON_INTERACTIVE`| (optional) `1` auto-select first suggestion & skip prompt |
-| `AIC_AUTO_COMMIT`    | (optional) With NON_INTERACTIVE=1 also run `git commit` |
-| `--no-color` / `AIC_NO_COLOR` | Disable ANSI colors |
-| `--version` / `-v`   | Show version and exit |
+- Use 1–9 (and 0 for the 10th) to pick a suggestion.
+- Use ↑/↓ to navigate; Space toggles selection for multi-select.
+- With 2+ selections, press Enter to “Combine” and get a fresh set of refined suggestions. Repeat as needed to iterate toward the best message.
 
-### Example Help Snippet
+## Configuration (Environment Options)
 
-```
-Usage:
-	aic [-s "extra instruction"] [--version] [--no-color]
+Provider and model:
 
-Arguments & Environment:
-        OPENAI_API_KEY        (required for provider=openai) OpenAI API key
-        CLAUDE_API_KEY        (required for provider=claude) Claude API key
-        AIC_MODEL             (optional) Model [provider default]
-	...
-	--version / -v        Show version and exit
-	--no-color            Disable colored output (alias: AIC_NO_COLOR=1)
+- `AIC_PROVIDER` (default: `openai`): choose `openai` or `claude`.
+- `OPENAI_API_KEY`: required when `AIC_PROVIDER=openai`.
+- `CLAUDE_API_KEY`: required when `AIC_PROVIDER=claude`.
+- `AIC_MODEL`: override model; defaults depend on provider:
+  - OpenAI default: `gpt-4o-mini`
+  - Claude default: `claude-3-sonnet-20240229`
 
-Example:
-	aic -s "Refactor auth logic"
-```
+Generation behavior:
+
+- `AIC_SUGGESTIONS`: number of suggestions (1–10, default: 5).
+- `AIC_MOCK`: set to `1` for local mock suggestions (no API calls).
+
+Run modes and output:
+
+- `AIC_NON_INTERACTIVE`: set to `1` to print and select the first suggestion without prompts (CI mode).
+- `AIC_AUTO_COMMIT`: with non-interactive mode, also run `git commit -m ...`.
+- `AIC_NO_COLOR` or `--no-color`: disable ANSI colors.
+- `-s "..."`: provide extra instruction appended to the system prompt.
+- `--version` / `-v`: print version label and exit.
+
+Debugging:
+
+- `AIC_DEBUG`: set to `1` to print verbose raw response details on errors.
+- `AIC_DEBUG_SUMMARY`: set to `1` to print diff summary debug details when large diff summarization triggers.
+
+Notes on large diffs:
+
+- When the staged diff is very large, the tool calls the provider’s default model (ignores `AIC_MODEL`) to generate a compact “Diff Summary” and then appends a clearly marked truncated raw diff (~16k chars) with cutoff notes. If summarization fails, it falls back to simple truncation.
 
 ## Testing Models
 
-Use mock mode (fast, offline):
+Mock mode (fast, offline):
 
 ```bash
 AIC_MOCK=1 ./scripts/test_openai_models.sh
@@ -200,13 +188,13 @@ export CLAUDE_API_KEY=sk-...
 
 Validate summarization behavior with a synthetic large diff (~50KB):
 
-Mock (no real API usage):
+Mock (no API calls):
 
 ```bash
 bash scripts/test_large_diff.sh
 ```
 
-Real API (will consume tokens):
+Real API (consumes tokens):
 
 ```bash
 export OPENAI_API_KEY=sk-...
@@ -218,16 +206,3 @@ Enable debug output for the summary step:
 ```bash
 export AIC_DEBUG_SUMMARY=1
 ```
-
-## Limitations / Notes
-
-- Only OpenAI provider supported currently.
-- For large diffs the raw diff portion is truncated to ~16k chars after generating a summary; a cutoff note shows omitted size.
-- If summarization request fails, fallback is a plain truncation (legacy behavior).
-- Suggestions limited to 10 for quick single-key selection (1–9,0).
-- Version label is fixed to "master" by design (no semantic versioning).
-
-## Roadmap Ideas
-
-- Support Anthropic / local providers via provider interface
-- Optional streaming output
