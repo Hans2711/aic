@@ -13,6 +13,7 @@ AI-assisted git commit message generator.
 - Mock mode (`AIC_MOCK=1`) for offline/local testing (no API calls)
 - `--no-color` flag (or `AIC_NO_COLOR=1`) to disable ANSI colors
 - `--version` / `-v` flag to print version
+- Multi-select + combine: interactively press Space to select multiple suggestions, then Enter to ask the AI to combine them into a fresh set (defaults to 5) of improved suggestions. Repeat as needed, then pick one.
 - Automatic rich diff summarization when the staged diff exceeds ~16k characters:
 	- Uses the provider's default model (ignores `AIC_MODEL` override for the summary step)
 	- Produces a concise file/change impact overview + key impacts

@@ -160,6 +160,74 @@ func GenerateSuggestions(cfg Config, apiKey string) ([]string, error) {
 	return suggestions, nil
 }
 
+// GenerateCombinedSuggestions asks the AI to combine multiple commit messages
+// into a fresh set of consolidated suggestions. It returns up to cfg.Suggestions
+// items, formatted one message per choice with no numbering or bullets.
+func GenerateCombinedSuggestions(cfg Config, apiKey string, selected []string) ([]string, error) {
+    if len(selected) < 2 {
+        return nil, errors.New("need at least two messages to combine")
+    }
+    if config.Bool(config.EnvAICMock) {
+        // Simple mock that fuses the first two messages
+        fused := strings.Join(selected, "; ")
+        out := []string{
+            fused,
+            "refactor: combined mock suggestions",
+            "chore: refine combined wording",
+            "feat: consolidate scope across changes",
+            "fix: address edge cases from combined"}
+        if cfg.Suggestions > 0 && cfg.Suggestions < len(out) { out = out[:cfg.Suggestions] }
+        return out, nil
+    }
+    if apiKey == "" {
+        return nil, errors.New("missing OPENAI_API_KEY")
+    }
+    systemMsg := "You are a helpful assistant that synthesizes multiple draft commit messages into improved conventional commit suggestions. " +
+        "Given several commit messages that may overlap, produce distinct, concise, high-quality alternatives (max 30 tokens each). " +
+        "No line breaks; return ONLY the commit messages, one per choice, with no numbering or bullets."
+    userContent := "Combine and refine these commit messages into consolidated alternatives:\n\n" + strings.Join(selected, "\n")
+
+    client := openai.NewClient(apiKey)
+    temp := float32(0.4)
+    resp, err := client.Chat(openai.ChatCompletionRequest{
+        Model:       cfg.Model,
+        Messages:    []openai.Message{{Role: "system", Content: systemMsg}, {Role: "user", Content: userContent}},
+        MaxTokens:   256,
+        N:           cfg.Suggestions,
+        Temperature: &temp,
+    })
+    if err != nil { return nil, err }
+    if len(resp.Choices) == 0 { return nil, errors.New("no choices returned") }
+    suggestions := make([]string, 0, len(resp.Choices))
+    for _, c := range resp.Choices {
+        msg := strings.TrimSpace(c.Message.Content)
+        if msg == "" { continue }
+        lines := []string{msg}
+        if strings.Contains(msg, "\n") {
+            lines = []string{}
+            for _, line := range strings.Split(msg, "\n") {
+                line = strings.TrimSpace(line)
+                if line == "" { continue }
+                lines = append(lines, line)
+            }
+        }
+        for _, ln := range lines {
+            ln = cli.StripLeadingListMarker(ln)
+            if ln == "" { continue }
+            suggestions = append(suggestions, ln)
+        }
+    }
+    if len(suggestions) == 0 {
+        errMsg := "empty suggestions after combining"
+        if config.Bool(config.EnvAICDebug) && resp != nil && resp.Raw != "" {
+            errMsg = fmt.Sprintf("%s\n\nRaw Response:\n%s", errMsg, resp.Raw)
+        }
+        return nil, errors.New(errMsg)
+    }
+    if len(suggestions) > cfg.Suggestions { suggestions = suggestions[:cfg.Suggestions] }
+    return suggestions, nil
+}
+
 // summarizeDiff creates a concise structured summary of a very large diff.
 // It ALWAYS uses the providers default model (defaultModel constant) regardless of user override.
 // The output is intentionally compact: bullet-style high level file change descriptions + notable additions/removals.
@@ -299,6 +367,12 @@ func PromptUserSelect(suggestions []string) (string, error) {
     defer restore()
 
     selected := 0
+    checked := map[int]bool{}
+    countChecked := func() int {
+        c := 0
+        for _, v := range checked { if v { c++ } }
+        return c
+    }
     render := func() {
         cols := termCols()
         // content prefix length estimate: "> " or two spaces + "[x] " ~ 6 chars
@@ -309,6 +383,9 @@ func PromptUserSelect(suggestions []string) (string, error) {
         for i := 0; i < n; i++ {
             idxLabel := fmt.Sprintf("%d", i+1)
             if n == 10 && i == 9 { idxLabel = "0" }
+            // Checkbox indicator for multi-select
+            box := "[ ]"
+            if checked[i] { box = "[x]" }
             prefix := "  "
             lineColorStart := cli.ColorCyan
             lineColorEnd := cli.ColorReset
@@ -319,10 +396,14 @@ func PromptUserSelect(suggestions []string) (string, error) {
             }
             msg := suggestions[i]
             if runeLen(msg) > maxMsg { msg = truncateRunes(msg, maxMsg) }
-            fmt.Printf("%s[%s] %s%s%s\n", prefix, idxLabel, lineColorStart, msg, lineColorEnd)
+            fmt.Printf("%s[%s] %s %s%s%s\n", prefix, idxLabel, box, lineColorStart, msg, lineColorEnd)
         }
         // Instructions
-        fmt.Printf("%sUse ↑/↓ to navigate, numbers to select (1-9%s), Enter to confirm.%s\n", cli.ColorDim, func() string { if n == 10 { return ",0" }; return "" }(), cli.ColorReset)
+        extra := ",0"
+        if n != 10 { extra = "" }
+        multi := ""
+        if countChecked() >= 2 { multi = fmt.Sprintf(" – %d selected; Enter combines", countChecked()) }
+        fmt.Printf("%sUse ↑/↓, Space to toggle select, numbers to pick (1-9%s), Enter to confirm%s.%s\n", cli.ColorDim, extra, multi, cli.ColorReset)
     }
 
     // Initial render
@@ -347,8 +428,56 @@ func PromptUserSelect(suggestions []string) (string, error) {
         case 3: // Ctrl+C
             return "", errors.New("selection canceled")
         case '\r', '\n':
-            // Enter confirms
+            // Enter confirms or combines
+            if countChecked() >= 2 {
+                // Restore terminal to normal before network call/spinner
+                restore()
+                // Collect selected messages in order of appearance
+                combined := make([]string, 0, countChecked())
+                for i := 0; i < n; i++ { if checked[i] { combined = append(combined, suggestions[i]) } }
+                // Load cfg from env for combine step
+                cfg, _ := LoadConfig("")
+                stop := cli.Spinner(fmt.Sprintf("Combining %d selected messages via %s", len(combined), cfg.Model))
+                newSugs, err := GenerateCombinedSuggestions(cfg, config.Get(config.EnvOpenAIAPIKey), combined)
+                stop(err == nil)
+                if err != nil {
+                    return "", err
+                }
+                // Re-enter cbreak mode for interactive selection
+                var reErr error
+                restore, reErr = enableCBreak()
+                if reErr != nil {
+                    // Fallback: simple selection prompt
+                    // Print combined suggestions and pick first by default
+                    fmt.Printf("%s%s %sCombined suggestions:%s\n", cli.ColorGray, cli.ColorBold, cli.IconInfo, cli.ColorReset)
+                    for i, s := range newSugs { fmt.Printf("  %s[%d]%s %s%s%s\n", cli.ColorYellow, i+1, cli.ColorReset, cli.ColorCyan, s, cli.ColorReset) }
+                    fmt.Printf("\n%s%s Choose a commit message [default: 1]: %s", cli.ColorBold, cli.IconPrompt, cli.ColorCyan)
+                    var choiceInput string
+                    fmt.Scanln(&choiceInput)
+                    fmt.Printf("%s", cli.ColorReset)
+                    if choiceInput == "" { return newSugs[0], nil }
+                    if v, err := strconv.Atoi(choiceInput); err == nil && v >= 1 && v <= len(newSugs) { return newSugs[v-1], nil }
+                    return newSugs[0], nil
+                }
+                // Ensure terminal will be restored on function exit for the new cbreak session too
+                defer restore()
+                // Replace list and reset state, then re-render
+                suggestions = newSugs
+                n = min(len(suggestions), 10)
+                selected = 0
+                checked = map[int]bool{}
+                // Recompute lines and render
+                backLines = n + 2
+                render()
+                continue
+            }
+            // If exactly one is checked, return it; otherwise return current selection
+            if countChecked() == 1 {
+                for i := 0; i < n; i++ { if checked[i] { return suggestions[i], nil } }
+            }
             return suggestions[selected], nil
+        case ' ': // Space toggles selection on current line
+            checked[selected] = !checked[selected]
         case 'k': // vim-like up (optional)
             if selected > 0 { selected-- }
         case 'j': // vim-like down (optional)
