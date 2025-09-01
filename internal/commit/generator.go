@@ -251,7 +251,7 @@ func PromptUserSelect(suggestions []string) (string, error) {
 
     // If STDIN is not a TTY (e.g., piped input), fall back to simple Scanln to remain scriptable
     if fi, err := os.Stdin.Stat(); err == nil && (fi.Mode()&os.ModeCharDevice) == 0 {
-        fmt.Printf("%s\n%s%s Commit message suggestions:%s\n", cli.ColorGray, cli.ColorBold, cli.IconInfo, cli.ColorReset)
+        fmt.Printf("%s%s %sCommit message suggestions:%s\n", cli.ColorGray, cli.ColorBold, cli.IconInfo, cli.ColorReset)
         for i := 0; i < n; i++ {
             fmt.Printf("  %s[%d]%s %s%s%s\n", cli.ColorYellow, i+1, cli.ColorReset, cli.ColorCyan, suggestions[i], cli.ColorReset)
         }
@@ -278,7 +278,7 @@ func PromptUserSelect(suggestions []string) (string, error) {
     restore, err := enableCBreak()
     if err != nil {
         // Fallback to Scanln if terminal tweak fails
-        fmt.Printf("%s\n%s%s Commit message suggestions:%s\n", cli.ColorGray, cli.ColorBold, cli.IconInfo, cli.ColorReset)
+        fmt.Printf("%s%s %sCommit message suggestions:%s\n", cli.ColorGray, cli.ColorBold, cli.IconInfo, cli.ColorReset)
         for i := 0; i < n; i++ {
             fmt.Printf("  %s[%d]%s %s%s%s\n", cli.ColorYellow, i+1, cli.ColorReset, cli.ColorCyan, suggestions[i], cli.ColorReset)
         }
@@ -302,8 +302,12 @@ func PromptUserSelect(suggestions []string) (string, error) {
 
     selected := 0
     render := func() {
-        // Header
-        fmt.Printf("%s\n%s%s Commit message suggestions:%s\n", cli.ColorGray, cli.ColorBold, cli.IconInfo, cli.ColorReset)
+        cols := termCols()
+        // content prefix length estimate: "> " or two spaces + "[x] " ~ 6 chars
+        maxMsg := cols - 8
+        if maxMsg < 10 { maxMsg = 10 }
+        // Header (single line, no leading blank line)
+        fmt.Printf("%s%s %sCommit message suggestions:%s\n", cli.ColorGray, cli.ColorBold, cli.IconInfo, cli.ColorReset)
         for i := 0; i < n; i++ {
             idxLabel := fmt.Sprintf("%d", i+1)
             if n == 10 && i == 9 { idxLabel = "0" }
@@ -315,7 +319,9 @@ func PromptUserSelect(suggestions []string) (string, error) {
                 prefix = fmt.Sprintf("%s> %s", cli.ColorYellow, cli.ColorReset)
                 lineColorStart = cli.ColorGreen + cli.ColorBold
             }
-            fmt.Printf("%s[%s] %s%s%s\n", prefix, idxLabel, lineColorStart, suggestions[i], lineColorEnd)
+            msg := suggestions[i]
+            if runeLen(msg) > maxMsg { msg = truncateRunes(msg, maxMsg) }
+            fmt.Printf("%s[%s] %s%s%s\n", prefix, idxLabel, lineColorStart, msg, lineColorEnd)
         }
         // Instructions
         fmt.Printf("%sUse ↑/↓ to navigate, numbers to select (1-9%s), Enter to confirm.%s\n", cli.ColorDim, func() string { if n == 10 { return ",0" }; return "" }(), cli.ColorReset)
@@ -326,7 +332,7 @@ func PromptUserSelect(suggestions []string) (string, error) {
 
     // Read keys and update selection; act immediately on number press
     in := make([]byte, 3)
-    // lines printed after header: n + 2
+    // total lines for header + list + instruction
     backLines := n + 2
     moveUp := func(lines int) { if lines > 0 { fmt.Printf("\033[%dA", lines) } }
     clearLine := func() { fmt.Printf("\033[2K\r") }
@@ -371,10 +377,10 @@ func PromptUserSelect(suggestions []string) (string, error) {
                 return suggestions[9], nil
             }
         }
-        // Re-render list in place
+        // Re-render list in place without drifting
         moveUp(backLines)
-        for i := 0; i < backLines; i++ { clearLine(); fmt.Printf("\n") }
-        moveUp(backLines)
+        for i := 0; i < backLines; i++ { clearLine(); if i < backLines-1 { fmt.Printf("\n") } }
+        moveUp(backLines-1)
         render()
     }
     return suggestions[selected], nil
@@ -399,11 +405,30 @@ func enableCBreak() (func(), error) {
     restore := func() {
         if restored { return }
         restored = true
-        cmd := exec.Command("stty", string(state))
+        cmd := exec.Command("stty", strings.TrimSpace(string(state)))
         cmd.Stdin = os.Stdin
         _ = cmd.Run()
     }
     return restore, nil
+}
+
+// termCols returns the terminal width in columns, falling back to env COLUMNS or 80.
+func termCols() int {
+    if v := os.Getenv("COLUMNS"); v != "" {
+        if n, err := strconv.Atoi(v); err == nil && n > 20 { return n }
+    }
+    return 80
+}
+
+// runeLen returns number of runes in s.
+func runeLen(s string) int { return len([]rune(s)) }
+
+// truncateRunes truncates s to max runes and appends an ellipsis if truncated.
+func truncateRunes(s string, max int) string {
+    r := []rune(s)
+    if len(r) <= max { return s }
+    if max <= 1 { return string(r[:max]) }
+    return string(r[:max-1]) + "…"
 }
 
 // OfferCommit asks to commit or copy to clipboard.
