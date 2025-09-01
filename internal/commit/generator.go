@@ -116,11 +116,11 @@ func PromptUserSelect(suggestions []string) (string, error) {
 		for i, s := range suggestions { fmt.Printf("  %s[%d]%s %s%s%s\n", cli.ColorYellow, i+1, cli.ColorReset, cli.ColorCyan, s, cli.ColorReset) }
 		return suggestions[0], nil
 	}
-	fmt.Printf("%s\n%sCommit message suggestions:%s\n", cli.ColorGray, cli.ColorBold, cli.ColorReset)
+	fmt.Printf("%s\n%s%s Commit message suggestions:%s\n", cli.ColorGray, cli.ColorBold, cli.IconInfo, cli.ColorReset)
 	for i, s := range suggestions {
 		fmt.Printf("  %s[%d]%s %s%s%s\n", cli.ColorYellow, i+1, cli.ColorReset, cli.ColorCyan, s, cli.ColorReset)
 	}
-	fmt.Printf("\n%sChoose a commit message %s[1-%d]%s (default %s1%s): %s", cli.ColorBold, cli.ColorYellow, len(suggestions), cli.ColorReset, cli.ColorYellow, cli.ColorReset, cli.ColorBold)
+	fmt.Printf("\n%s%s Choose a commit message %s[1-%d]%s %s[default: 1]%s: %s", cli.ColorBold, cli.IconPrompt, cli.ColorYellow, len(suggestions), cli.ColorReset, cli.ColorDim, cli.ColorReset, cli.ColorCyan)
 	var choiceInput string
 	fmt.Scanln(&choiceInput)
 	selected := 1
@@ -145,7 +145,7 @@ func OfferCommit(msg string) error {
 		fmt.Printf("Non-interactive mode: skipping commit (set AIC_AUTO_COMMIT=1 to enable).\n")
 		return nil
 	}
-	fmt.Printf("\n%sCommit with this message now?%s %s[Y|n]: %s", cli.ColorBold, cli.ColorReset, cli.ColorYellow, cli.ColorReset)
+	fmt.Printf("\n%s%s Commit with this message now?%s %s[Y|n]%s %s[default: Y]%s: %s", cli.ColorBold, cli.IconPrompt, cli.ColorReset, cli.ColorYellow, cli.ColorReset, cli.ColorDim, cli.ColorReset, cli.ColorCyan)
 	var commitChoice string
 	fmt.Scanln(&commitChoice)
 	if strings.ToLower(commitChoice) == "y" || commitChoice == "" {

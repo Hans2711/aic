@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/diesi/aic/internal/cli"
 	"github.com/diesi/aic/internal/commit"
@@ -33,9 +34,9 @@ func main() {
 		fatal(err)
 	}
 
-	stop := cli.Spinner(fmt.Sprintf("%sRequesting %s%d%s suggestions from %s%s%s", cli.ColorDim, cli.ColorYellow, cfg.Suggestions, cli.ColorReset, cli.ColorCyan, cfg.Model, cli.ColorReset))
+	stop := cli.Spinner(fmt.Sprintf("Requesting %d suggestions from %s", cfg.Suggestions, cfg.Model))
 	suggestions, err := commit.GenerateSuggestions(cfg, os.Getenv("OPENAI_API_KEY"))
-	stop()
+	stop(err == nil)
 	if err != nil {
 		if isInvalidKeyErr(err) {
 			fmt.Fprintln(os.Stderr, "Hint: Ensure your real OPENAI_API_KEY is exported (export OPENAI_API_KEY=sk-...)")
@@ -52,50 +53,73 @@ func main() {
 }
 
 func printHelp() {
-	fmt.Printf(`%s%s aic%s – %sAI-assisted git commit message generator%s
-
-%sUsage%s:
-	aic [-s "extra instruction"]
-
-%sDescription%s:
-	Generates conventional-style git commit messages based on your staged changes.
-	It requests suggestions from an AI model, lets you choose one, and then offers
-	to perform the commit or copy the message to your clipboard.
-
-%sArguments%s:
-	%s-s%s <instruction>   Additional instruction, e.g. %s"focus on backend"%s
-
-%sEnvironment%s:
-	%sOPENAI_API_KEY%s   (required) OpenAI API key
-	%sAIC_MODEL%s        (optional) Model (default: gpt-4o-mini)
-	%sAIC_SUGGESTIONS%s  (optional) Suggestions count 1-15 (default: 5)
-	%sAIC_PROVIDER%s     (optional) Provider (default: openai)
-	%sAIC_DEBUG%s        (optional) Set to 1 for raw response debug
-	%sAIC_MOCK%s         (optional) Set to 1 to use mock suggestions (no API call)
-	%sAIC_NON_INTERACTIVE%s (optional) Set to 1 to auto-select first suggestion & skip commit
-	%sAIC_AUTO_COMMIT%s  (optional) With NON_INTERACTIVE=1, also perform the commit
-
-	%sExample%s:
-		aic -s "Refactor auth logic"
-	`,
-			cli.ColorBold, cli.ColorCyan, cli.ColorReset, cli.ColorMagenta, cli.ColorReset,
-			cli.ColorBold, cli.ColorReset,
-			cli.ColorBold, cli.ColorReset,
-			cli.ColorBold, cli.ColorReset,
-			cli.ColorYellow, cli.ColorReset, cli.ColorGreen, cli.ColorReset,
-			cli.ColorBold, cli.ColorReset,
-			cli.ColorYellow, cli.ColorReset,
-			cli.ColorYellow, cli.ColorReset,
-			cli.ColorYellow, cli.ColorReset,
-			cli.ColorYellow, cli.ColorReset,
-			cli.ColorYellow, cli.ColorReset,
-			cli.ColorYellow, cli.ColorReset,
-			cli.ColorYellow, cli.ColorReset,
-			cli.ColorBold, cli.ColorReset,
-		)
+	// Prepare aligned environment variable table. Two columns: VAR and description.
+	rows := [][2]string{
+		{"OPENAI_API_KEY", "(required) OpenAI API key"},
+		{"AIC_MODEL", "(optional) Model [default: gpt-4o-mini]"},
+		{"AIC_SUGGESTIONS", "(optional) Suggestions count 1-15 [default: 5]"},
+		{"AIC_PROVIDER", "(optional) Provider [default: openai]"},
+		{"AIC_DEBUG", "(optional) Set to 1 for raw response debug"},
+		{"AIC_MOCK", "(optional) Set to 1 for mock suggestions (no API call)"},
+		{"AIC_NON_INTERACTIVE", "(optional) 1 to auto-select first suggestion & skip commit"},
+		{"AIC_AUTO_COMMIT", "(optional) With NON_INTERACTIVE=1, also perform the commit"},
+	}
+	maxVar := 0
+	for _, r := range rows { if len(r[0]) > maxVar { maxVar = len(r[0]) } }
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("%s%s aic%s – %sAI-assisted git commit message generator%s\n\n",
+		cli.ColorBold, cli.ColorCyan, cli.ColorReset, cli.ColorMagenta, cli.ColorReset))
+	b.WriteString(fmt.Sprintf("%sUsage%s:\n", cli.ColorBold, cli.ColorReset))
+	b.WriteString("  aic [-s \"extra instruction\"]\n\n")
+	b.WriteString(fmt.Sprintf("%sDescription%s:\n", cli.ColorBold, cli.ColorReset))
+	b.WriteString("  Generates conventional Git commit messages based on your staged changes.\n")
+	b.WriteString("  It requests suggestions from an AI model, lets you choose one, then offers to commit.\n\n")
+	b.WriteString(fmt.Sprintf("%sArguments%s:\n", cli.ColorBold, cli.ColorReset))
+	b.WriteString(fmt.Sprintf("  %s-s%s <instruction>   Additional instruction, e.g. %s\"focus on backend\"%s\n\n",
+		cli.ColorYellow, cli.ColorReset, cli.ColorGreen, cli.ColorReset))
+	b.WriteString(fmt.Sprintf("%sEnvironment%s:\n", cli.ColorBold, cli.ColorReset))
+	for _, r := range rows {
+		pad := strings.Repeat(" ", maxVar-len(r[0]))
+		color := cli.ColorCyan
+		if strings.Contains(r[1], "required") { color = cli.ColorRed }
+		// Each line: VAR (padded) two spaces then description
+		b.WriteString(fmt.Sprintf("  %s%s%s%s  %s%s%s\n", cli.ColorBold, r[0], cli.ColorReset, pad, color, r[1], cli.ColorReset))
+	}
+	b.WriteString("\n")
+	b.WriteString(fmt.Sprintf("%sExample%s:\n", cli.ColorBold, cli.ColorReset))
+	b.WriteString("  aic -s \"Refactor auth logic\"\n")
+	fmt.Print(b.String())
 }
 func fatal(err error) {
-	fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+	// Provide nicer categorized errors
+	banner := fmt.Sprintf("%s%s %sERROR%s", cli.ColorBold, cli.ColorRed, cli.IconError, cli.ColorReset)
+	hintLines := []string{}
+	msg := err.Error()
+	lower := strings.ToLower(msg)
+	switch {
+	case strings.Contains(lower, "no staged changes"):
+		hintLines = append(hintLines, fmt.Sprintf("%s%s%s Stage changes first, e.g.: %sgit add -p%s", cli.ColorYellow, cli.IconInfo, cli.ColorReset, cli.ColorGreen, cli.ColorReset))
+	case strings.Contains(lower, "not a git repository"):
+		hintLines = append(hintLines, fmt.Sprintf("%s%s%s Run %sgit init%s or cd into a repo.", cli.ColorYellow, cli.IconInfo, cli.ColorReset, cli.ColorGreen, cli.ColorReset))
+	case strings.Contains(lower, "missing openai_api_key"):
+		hintLines = append(hintLines, fmt.Sprintf("%s%s%s Export your key: %sexport OPENAI_API_KEY=sk-***%s", cli.ColorYellow, cli.IconInfo, cli.ColorReset, cli.ColorGreen, cli.ColorReset))
+	case isRateLimitErr(lower):
+		hintLines = append(hintLines, fmt.Sprintf("%s%s%s Rate limits; wait or lower suggestions (AIC_SUGGESTIONS=3).", cli.ColorYellow, cli.IconInfo, cli.ColorReset))
+	}
+
+	// Add generic retry suggestion for transient network errors
+	if strings.Contains(lower, "timeout") || strings.Contains(lower, "temporarily") || strings.Contains(lower, "connection refused") {
+		hintLines = append(hintLines, fmt.Sprintf("%s%s%s Network issue – retry shortly.", cli.ColorYellow, cli.IconInfo, cli.ColorReset))
+	}
+	ts := time.Now().Format("15:04:05")
+	fmt.Fprintf(os.Stderr, "%s %s%s%s\n  %s%v%s\n", banner, cli.ColorDim, ts, cli.ColorReset, cli.ColorRed, msg, cli.ColorReset)
+	if len(hintLines) > 0 {
+		for _, h := range hintLines { fmt.Fprintln(os.Stderr, "  "+h) }
+	}
+	// Provide debug env hint if user wants more
+	if os.Getenv("AIC_DEBUG") == "" {
+		fmt.Fprintf(os.Stderr, "  %s%s%s Set AIC_DEBUG=1 for verbose response details.%s\n", cli.ColorDim, cli.IconInfo, cli.ColorReset, cli.ColorReset)
+	}
 	os.Exit(1)
 }
 
@@ -105,4 +129,10 @@ func isInvalidKeyErr(err error) bool {
 	}
 	s := err.Error()
 	return strings.Contains(strings.ToLower(s), "invalid_api_key") || strings.Contains(strings.ToLower(s), "incorrect api key")
+}
+
+func isRateLimitErr(s string) bool {
+	if s == "" { return false }
+	s = strings.ToLower(s)
+	return strings.Contains(s, "rate limit") || strings.Contains(s, "too many requests")
 }

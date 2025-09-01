@@ -16,6 +16,12 @@ var (
 	ColorMagenta = "\033[35m"
 	ColorCyan    = "\033[36m"
 	ColorGray    = "\033[90m"
+
+	// Icon (symbol) constants – keep ASCII fallbacks for non-Unicode terminals if needed in future.
+	IconSuccess = "✓"
+	IconError   = "✗"
+	IconPrompt  = "➤"
+	IconInfo    = "ℹ"
 )
 
 func init() {
