@@ -30,16 +30,28 @@ func (c *Client) Chat(req ChatCompletionRequest) (*ChatCompletionResponse, error
 	for {
 		attempt++
 		bodyBytes, err := json.Marshal(req)
-		if err != nil { return nil, fmt.Errorf("marshal request: %w", err) }
+		if err != nil {
+			return nil, fmt.Errorf("marshal request: %w", err)
+		}
 		endpoint := c.BaseURL + "/chat/completions"
 		httpReq, err := http.NewRequest("POST", endpoint, bytes.NewBuffer(bodyBytes))
-		if err != nil { return nil, fmt.Errorf("new request: %w", err) }
+		if err != nil {
+			return nil, fmt.Errorf("new request: %w", err)
+		}
 		httpReq.Header.Set("Authorization", "Bearer "+c.APIKey)
 		httpReq.Header.Set("Content-Type", "application/json")
 		resp, err := c.HTTPClient.Do(httpReq)
-		if err != nil { return nil, fmt.Errorf("request failed: %w", err) }
-		respBody, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		if err != nil {
+			return nil, fmt.Errorf("request failed: %w", err)
+		}
+		respBody, readErr := io.ReadAll(resp.Body)
+		closeErr := resp.Body.Close()
+		if readErr != nil {
+			return nil, fmt.Errorf("read response body: %w", readErr)
+		}
+		if closeErr != nil {
+			return nil, fmt.Errorf("close response body: %w", closeErr)
+		}
 		if resp.StatusCode < 200 || resp.StatusCode > 299 {
 			bodyStr := string(respBody)
 			if attempt < 3 {
@@ -75,7 +87,7 @@ func (c *Client) Chat(req ChatCompletionRequest) (*ChatCompletionResponse, error
 			}
 			if allEmptyWithLength && req.MaxCompletionTokens > 0 {
 				// Likely hit token limit before generating content. Retry with larger limit.
-				req.MaxCompletionTokens *= 2 // Double the tokens and retry
+				req.MaxCompletionTokens *= 2        // Double the tokens and retry
 				if req.MaxCompletionTokens > 8000 { // Safety cap
 					return &completion, nil
 				}
