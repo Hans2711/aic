@@ -10,19 +10,27 @@ on:
     branches: [ "master" ]
 
 jobs:
-
   build:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    - name: Set up Go
-      uses: actions/setup-go@v4
-      with:
-        go-version: '1.20'
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          check-latest: true
+          cache: true
 
-    - name: Build
-      run: go build -v ./...
+      - name: Verify (vet)
+        run: go vet ./...
 
-    - name: Test
-      run: go test -v ./...
+      - name: Build (packages)
+        run: go build -v ./...
+
+      - name: Test
+        run: go test -v ./...
+
+      - name: Build (release targets)
+        run: bash scripts/build.sh
