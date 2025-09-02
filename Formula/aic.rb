@@ -2,8 +2,8 @@ class Aic < Formula
   desc "AI-assisted git commit message generator"
   homepage "https://github.com/Hans2711/aic"
   url "https://github.com/Hans2711/aic/archive/dad708eb1004cf24954193adca38cbc00f26aee0.tar.gz"
-  sha256 "70577b15d7c764de9905895da1583c0750ace9aff6bbb2e9adca1319dcc39c5d"
   version "1.0.0"
+  sha256 "70577b15d7c764de9905895da1583c0750ace9aff6bbb2e9adca1319dcc39c5d"
   head "https://github.com/Hans2711/aic.git", branch: "master"
 
   depends_on "go" => :build
