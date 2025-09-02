@@ -65,10 +65,34 @@ if ! command -v aic >/dev/null 2>&1; then
   exit 0
 fi
 
-# Run aic in hook mode to write the message. Do not fail the commit on errors.
-if ! aic --hook "${MSG_FILE}"; then
-  # Uncomment for debug: echo "[aic] hook failed; leaving default message" >&2
-  :
+# Helper: run aic and write into MSG_FILE
+run_aic_write() {
+  local non_interactive="$1" # 1 or 0
+  if aic --help 2>/dev/null | grep -q -- "--hook"; then
+    if [[ "$non_interactive" == "1" ]]; then
+      AIC_NON_INTERACTIVE=1 aic --hook "${MSG_FILE}" || return 0
+    else
+      aic --hook "${MSG_FILE}" || return 0
+    fi
+  else
+    # Fallback for older aic without --hook: only support sentinel non-interactive
+    if [[ "$non_interactive" == "1" ]]; then
+      # Capture output and extract the line following 'Selected commit message:'
+      local out msg
+      out="$(AIC_NON_INTERACTIVE=1 aic --no-color 2>/dev/null || true)"
+      msg="$(printf '%s\n' "$out" | awk 'f{print; exit} /Selected commit message:/{f=1}' | sed -e 's/^  //')"
+      if [[ -n "$msg" ]]; then
+        printf '%s\n' "$msg" >"${MSG_FILE}"
+      fi
+    fi
+  fi
+}
+
+# Run aic in hook mode to write the message. For sentinel, prefer non-interactive.
+if [[ ${is_sentinel} -eq 1 ]]; then
+  run_aic_write 1 || :
+else
+  run_aic_write 0 || :
 fi
 
 exit 0
