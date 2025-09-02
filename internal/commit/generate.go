@@ -25,10 +25,14 @@ func GenerateSuggestions(cfg Config, apiKey string) ([]string, error) {
 		return mock, nil
 	}
 	if apiKey == "" {
-		if cfg.Provider == "claude" {
+		switch cfg.Provider {
+		case "claude":
 			return nil, errors.New("missing CLAUDE_API_KEY")
+		case "gemini":
+			return nil, errors.New("missing GEMINI_API_KEY")
+		default:
+			return nil, errors.New("missing OPENAI_API_KEY")
 		}
-		return nil, errors.New("missing OPENAI_API_KEY")
 	}
 	gitDiff, err := git.StagedDiff()
 	if err != nil {
@@ -39,9 +43,12 @@ func GenerateSuggestions(cfg Config, apiKey string) ([]string, error) {
 	}
 
 	var p provider.Provider
-	if cfg.Provider == "claude" {
+	switch cfg.Provider {
+	case "claude":
 		p = provider.NewClaude(apiKey)
-	} else {
+	case "gemini":
+		p = provider.NewGemini(apiKey)
+	default:
 		p = provider.NewOpenAI(apiKey)
 	}
 

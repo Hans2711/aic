@@ -1,16 +1,16 @@
 package main
 
 import (
-    "fmt"
-    "os"
-    "strings"
-    "time"
+	"fmt"
+	"os"
+	"strings"
+	"time"
 
-    "github.com/diesi/aic/internal/cli"
-    "github.com/diesi/aic/internal/commit"
-    "github.com/diesi/aic/internal/config"
-    "github.com/diesi/aic/internal/git"
-    "github.com/diesi/aic/internal/version"
+	"github.com/diesi/aic/internal/cli"
+	"github.com/diesi/aic/internal/commit"
+	"github.com/diesi/aic/internal/config"
+	"github.com/diesi/aic/internal/git"
+	"github.com/diesi/aic/internal/version"
 )
 
 func main() {
@@ -49,28 +49,34 @@ func main() {
 		fatal(err)
 	}
 
-    // Show which staged files are included in the diff (for transparency)
-    if files, err := git.StagedFiles(); err == nil && len(files) > 0 {
-        fmt.Printf("%s%s Staged changes:%s\n", cli.ColorGray, cli.ColorBold, cli.ColorReset)
-        for _, f := range files {
-            fmt.Printf("  %s- %s%s\n", cli.ColorYellow, f, cli.ColorReset)
-        }
-    }
+	// Show which staged files are included in the diff (for transparency)
+	if files, err := git.StagedFiles(); err == nil && len(files) > 0 {
+		fmt.Printf("%s%s Staged changes:%s\n", cli.ColorGray, cli.ColorBold, cli.ColorReset)
+		for _, f := range files {
+			fmt.Printf("  %s- %s%s\n", cli.ColorYellow, f, cli.ColorReset)
+		}
+	}
 
-    stop := cli.Spinner(fmt.Sprintf("Requesting %d suggestions from %s", cfg.Suggestions, cfg.Model))
+	stop := cli.Spinner(fmt.Sprintf("Requesting %d suggestions from %s", cfg.Suggestions, cfg.Model))
 	var apiKey string
-	if cfg.Provider == "claude" {
+	switch cfg.Provider {
+	case "claude":
 		apiKey = config.Get(config.EnvClaudeAPIKey)
-	} else {
+	case "gemini":
+		apiKey = config.Get(config.EnvGeminiAPIKey)
+	default:
 		apiKey = config.Get(config.EnvOpenAIAPIKey)
 	}
 	suggestions, err := commit.GenerateSuggestions(cfg, apiKey)
 	stop(err == nil)
 	if err != nil {
 		if isInvalidKeyErr(err) {
-			if cfg.Provider == "claude" {
+			switch cfg.Provider {
+			case "claude":
 				fmt.Fprintln(os.Stderr, "Hint: Ensure your real CLAUDE_API_KEY is exported (export CLAUDE_API_KEY=sk-...)")
-			} else {
+			case "gemini":
+				fmt.Fprintln(os.Stderr, "Hint: Ensure your real GEMINI_API_KEY is exported (export GEMINI_API_KEY=sk-...)")
+			default:
 				fmt.Fprintln(os.Stderr, "Hint: Ensure your real OPENAI_API_KEY is exported (export OPENAI_API_KEY=sk-...)")
 			}
 		}
@@ -86,17 +92,18 @@ func main() {
 }
 
 func buildHelp() string {
-    rows := [][2]string{
-        {"OPENAI_API_KEY", "(required for provider=openai) OpenAI API key"},
-        {"CLAUDE_API_KEY", "(required for provider=claude) Claude API key"},
-        {"AIC_MODEL", "(optional) Model [default depends on provider]"},
-        {"AIC_SUGGESTIONS", "(optional) Suggestions count 1-10 [default: 5; non-interactive: 1]"},
-        {"AIC_PROVIDER", "(optional) Provider [openai|claude] (default: auto-detect from keys; both -> openai)"},
-        {"AIC_DEBUG", "(optional) Set to 1 for raw response debug"},
-        {"AIC_MOCK", "(optional) Set to 1 for mock suggestions (no API call)"},
-        {"AIC_NON_INTERACTIVE", "(optional) 1 to auto-select first suggestion & skip commit"},
-        {"AIC_AUTO_COMMIT", "(optional) With NON_INTERACTIVE=1, also perform the commit"},
-        {"--version / -v", "Show version and exit"},
+	rows := [][2]string{
+		{"OPENAI_API_KEY", "(required for provider=openai) OpenAI API key"},
+		{"CLAUDE_API_KEY", "(required for provider=claude) Claude API key"},
+		{"GEMINI_API_KEY", "(required for provider=gemini) Gemini API key"},
+		{"AIC_MODEL", "(optional) Model [default depends on provider]"},
+		{"AIC_SUGGESTIONS", "(optional) Suggestions count 1-10 [default: 5; non-interactive: 1]"},
+		{"AIC_PROVIDER", "(optional) Provider [openai|claude|gemini] (default: auto-detect from keys; priority openai>claude>gemini)"},
+		{"AIC_DEBUG", "(optional) Set to 1 for raw response debug"},
+		{"AIC_MOCK", "(optional) Set to 1 for mock suggestions (no API call)"},
+		{"AIC_NON_INTERACTIVE", "(optional) 1 to auto-select first suggestion & skip commit"},
+		{"AIC_AUTO_COMMIT", "(optional) With NON_INTERACTIVE=1, also perform the commit"},
+		{"--version / -v", "Show version and exit"},
 		{"--no-color", "Disable colored output (alias: AIC_NO_COLOR=1)"},
 	}
 	maxVar := 0
@@ -141,6 +148,8 @@ func fatal(err error) {
 		hintLines = append(hintLines, fmt.Sprintf("%s%s%s Export your key: %sexport OPENAI_API_KEY=sk-***%s", cli.ColorYellow, cli.IconInfo, cli.ColorReset, cli.ColorGreen, cli.ColorReset))
 	case strings.Contains(lower, "missing claude_api_key"):
 		hintLines = append(hintLines, fmt.Sprintf("%s%s%s Export your key: %sexport CLAUDE_API_KEY=sk-***%s", cli.ColorYellow, cli.IconInfo, cli.ColorReset, cli.ColorGreen, cli.ColorReset))
+	case strings.Contains(lower, "missing gemini_api_key"):
+		hintLines = append(hintLines, fmt.Sprintf("%s%s%s Export your key: %sexport GEMINI_API_KEY=sk-***%s", cli.ColorYellow, cli.IconInfo, cli.ColorReset, cli.ColorGreen, cli.ColorReset))
 	case isRateLimitErr(lower):
 		hintLines = append(hintLines, fmt.Sprintf("%s%s%s Rate limits; wait or lower suggestions (AIC_SUGGESTIONS=3).", cli.ColorYellow, cli.IconInfo, cli.ColorReset))
 	}

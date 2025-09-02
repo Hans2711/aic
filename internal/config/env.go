@@ -11,6 +11,7 @@ import (
 const (
 	EnvOpenAIAPIKey      = "OPENAI_API_KEY"
 	EnvClaudeAPIKey      = "CLAUDE_API_KEY"
+	EnvGeminiAPIKey      = "GEMINI_API_KEY"
 	EnvAICModel          = "AIC_MODEL"
 	EnvAICSuggestions    = "AIC_SUGGESTIONS"
 	EnvAICMock           = "AIC_MOCK"

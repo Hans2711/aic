@@ -1,12 +1,12 @@
 # aic
 
-AI‑assisted git commit message generator with an iterative “combine” workflow and first‑class OpenAI + Claude support.
+AI‑assisted git commit message generator with an iterative “combine” workflow and first‑class OpenAI, Claude, and Gemini support.
 
 ## Quick Start
 
 ```bash
 # choose a provider (auto‑detected if set)
-export OPENAI_API_KEY=sk-...   # or: export CLAUDE_API_KEY=sk-...
+export OPENAI_API_KEY=sk-...   # or: export CLAUDE_API_KEY=sk-... or: export GEMINI_API_KEY=sk-...
 
 # generate commit messages for staged changes
 aic
@@ -21,8 +21,8 @@ AIC_NON_INTERACTIVE=1 AIC_AUTO_COMMIT=1 aic
 ## Highlights
 
 - Recursive combine: multi‑select suggestions, press Enter to synthesize better options, repeat to refine.
-- Dual providers: `openai` or `claude` (auto‑detect; both set → OpenAI).
-- Sensible defaults: OpenAI `gpt-4o-mini`, Claude `claude-3-sonnet-20240229` (override with `AIC_MODEL`).
+- Multiple providers: `openai`, `claude`, or `gemini` (auto‑detect; priority openai > claude > gemini).
+- Sensible defaults: OpenAI `gpt-4o-mini`, Claude `claude-3-sonnet-20240229`, Gemini `gemini-1.5-flash` (override with `AIC_MODEL`).
 - Friendly TUI: 1–9/0 to choose, arrows to navigate, Space to multi‑select.
 - CI‑ready: non‑interactive mode and optional auto‑commit.
 - Large diffs: structured summary plus clearly truncated raw diff with cutoff notes.
@@ -87,9 +87,9 @@ export AIC_NO_COLOR=1; aic
 
 Providers and models:
 
-- `AIC_PROVIDER`: `openai` | `claude` (auto‑detect from API keys; both set → OpenAI).
-- `OPENAI_API_KEY` / `CLAUDE_API_KEY`: required for chosen provider.
-- `AIC_MODEL`: override default model (OpenAI: `gpt-4o-mini`; Claude: `claude-3-sonnet-20240229`).
+- `AIC_PROVIDER`: `openai` | `claude` | `gemini` (auto‑detect from API keys; priority openai > claude > gemini).
+- `OPENAI_API_KEY` / `CLAUDE_API_KEY` / `GEMINI_API_KEY`: required for chosen provider.
+- `AIC_MODEL`: override default model (OpenAI: `gpt-4o-mini`; Claude: `claude-3-sonnet-20240229`; Gemini: `gemini-1.5-flash`).
 
 Generation & UX:
 
@@ -115,6 +115,22 @@ Large diffs:
 </details>
 
 <details>
+<summary><strong>Gemini Notes</strong></summary>
+
+- Models: commonly available options include `gemini-1.5-flash` (default) and `gemini-1.5-pro`. Newer `gemini-2.5-*` models may require allowlisted access.
+- Auto‑detect: setting `GEMINI_API_KEY` is enough; or force with `AIC_PROVIDER=gemini`.
+- Output budget: if Gemini returns empty content with `finishReason=MAX_TOKENS`, `aic` automatically retries with a larger output token budget. You can also set `AIC_SUGGESTIONS=1` or choose a smaller model (e.g., `gemini-1.5-flash`).
+
+Example:
+
+```bash
+export GEMINI_API_KEY=sk-...
+AIC_PROVIDER=gemini AIC_MODEL=gemini-1.5-flash aic
+```
+
+</details>
+
+<details>
 <summary><strong>Testing</strong></summary>
 
 Mock (fast, offline):
@@ -136,6 +152,13 @@ Claude API:
 ```bash
 export CLAUDE_API_KEY=sk-...
 ./scripts/test_claude_models.sh
+```
+
+Gemini API:
+
+```bash
+export GEMINI_API_KEY=sk-...
+./scripts/test_gemini_models.sh
 ```
 
 Large diff summarization (~50KB synthetic diff):
