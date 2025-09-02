@@ -1,22 +1,23 @@
 package main
 
 import (
-	"fmt"
-	"os"
-	"strings"
-	"time"
+    "fmt"
+    "os"
+    "strings"
+    "time"
 
-	"github.com/diesi/aic/internal/cli"
-	"github.com/diesi/aic/internal/commit"
-	"github.com/diesi/aic/internal/config"
-	"github.com/diesi/aic/internal/git"
-	"github.com/diesi/aic/internal/version"
+    "github.com/diesi/aic/internal/cli"
+    "github.com/diesi/aic/internal/commit"
+    "github.com/diesi/aic/internal/config"
+    "github.com/diesi/aic/internal/git"
+    "github.com/diesi/aic/internal/version"
 )
 
 func main() {
-	// Environment variables are used directly; no .env file loading.
-	var systemAddition string
-	args := os.Args[1:]
+    // Environment variables are used directly; no .env file loading.
+    var systemAddition string
+    var hookFile string
+    args := os.Args[1:]
 
 	// Soft warning for unknown/unused AIC_* variables to catch typos/misconfig
 	config.WarnUnknownAICEnv()
@@ -31,18 +32,24 @@ func main() {
 			fmt.Printf("aic %s\n", version.Get())
 			return
 		}
-		if arg == "--no-color" {
-			cli.DisableColors()
-			// remove the flag from further consideration
-			continue
-		}
-		if arg == "-s" {
-			if i+1 < len(args) {
-				systemAddition = args[i+1]
-				// basic: assumes value isn't another flag
-			}
-		}
-	}
+        if arg == "--no-color" {
+            cli.DisableColors()
+            // remove the flag from further consideration
+            continue
+        }
+        if arg == "--hook" {
+            if i+1 < len(args) {
+                hookFile = args[i+1]
+            }
+            continue
+        }
+        if arg == "-s" {
+            if i+1 < len(args) {
+                systemAddition = args[i+1]
+                // basic: assumes value isn't another flag
+            }
+        }
+    }
 
 	cfg, err := commit.LoadConfig(systemAddition)
 	if err != nil {
@@ -84,13 +91,20 @@ func main() {
 		}
 		fatal(err)
 	}
-	msg, err := commit.PromptUserSelect(suggestions)
-	if err != nil {
-		fatal(err)
-	}
-	if err := commit.OfferCommit(msg); err != nil {
-		fatal(err)
-	}
+    msg, err := commit.PromptUserSelect(suggestions)
+    if err != nil {
+        fatal(err)
+    }
+    // If invoked as a Git hook, write the message to the given file and exit.
+    if hookFile != "" {
+        if err := os.WriteFile(hookFile, []byte(msg+"\n"), 0644); err != nil {
+            fatal(fmt.Errorf("failed to write hook message file: %w", err))
+        }
+        return
+    }
+    if err := commit.OfferCommit(msg); err != nil {
+        fatal(err)
+    }
 }
 
 func buildHelp() string {
@@ -100,6 +114,7 @@ func buildHelp() string {
     rows = append(rows,
         [2]string{"--version / -v", "Show version and exit"},
         [2]string{"--no-color", "Disable colored output (alias: AIC_NO_COLOR=1)"},
+        [2]string{"--hook <file>", "Hook mode: write selected message to file and exit"},
     )
     rows = append(rows, config.HelpEnvRowsCustom()...)
 	maxVar := 0

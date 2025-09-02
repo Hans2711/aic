@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+set -u
+
+# Git prepare-commit-msg hook for aic
+# Usage by Git: prepare-commit-msg <MSG_FILE> [<SOURCE>] [<SHA1>]
+
+MSG_FILE=${1:-}
+SOURCE=${2:-}
+
+# Ensure a message file was provided
+if [[ -z "${MSG_FILE}" ]]; then
+  exit 0
+fi
+
+# Allow opt-out via env
+if [[ "${AIC_SKIP_HOOK:-}" == "1" ]]; then
+  exit 0
+fi
+
+# Skip if commit message is provided explicitly or from special sources
+case "${SOURCE}" in
+  message|merge|squash|commit)
+    # message: -m / -F was used
+    # merge: merge commit
+    # squash: from squash commit
+    # commit: --amend or -c/-C
+    exit 0
+    ;;
+esac
+
+# If the message file already has non-comment, non-empty content, don't overwrite
+if command -v grep >/dev/null 2>&1; then
+  if grep -qE '^[^#[:space:]]' "${MSG_FILE}"; then
+    exit 0
+  fi
+fi
+
+# Require aic to be available; if not, don't block commits
+if ! command -v aic >/dev/null 2>&1; then
+  # Uncomment for debug: echo "[aic] not on PATH; skipping hook" >&2
+  exit 0
+fi
+
+# Run aic in hook mode to write the message. Do not fail the commit on errors.
+if ! aic --hook "${MSG_FILE}"; then
+  # Uncomment for debug: echo "[aic] hook failed; leaving default message" >&2
+  :
+fi
+
+exit 0

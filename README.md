@@ -136,6 +136,28 @@ export AIC_NO_COLOR=1; aic
 </details>
 
 <details>
+<summary><strong>Git Hook</strong></summary>
+
+Install a `prepare-commit-msg` hook so `aic` suggests a message on `git commit`:
+
+```bash
+bash scripts/install_git_hook.sh
+```
+
+Behavior:
+
+- Runs for normal commits without `-m/-F` and not for merges/squashes/amends.
+- If the commit message file already has content, it leaves it unchanged.
+- Writes the selected message into the commit message buffer so you can still edit.
+
+Notes:
+
+- Ensure `aic` is on your `PATH`.
+- Temporarily skip the hook with `AIC_SKIP_HOOK=1 git commit`.
+
+</details>
+
+<details>
 <summary><strong>Configuration</strong></summary>
 
  Providers and models:
