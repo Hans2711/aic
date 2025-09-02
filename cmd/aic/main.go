@@ -1,15 +1,16 @@
 package main
 
 import (
-	"fmt"
-	"os"
-	"strings"
-	"time"
+    "fmt"
+    "os"
+    "strings"
+    "time"
 
-	"github.com/diesi/aic/internal/cli"
-	"github.com/diesi/aic/internal/commit"
-	"github.com/diesi/aic/internal/config"
-	"github.com/diesi/aic/internal/version"
+    "github.com/diesi/aic/internal/cli"
+    "github.com/diesi/aic/internal/commit"
+    "github.com/diesi/aic/internal/config"
+    "github.com/diesi/aic/internal/git"
+    "github.com/diesi/aic/internal/version"
 )
 
 func main() {
@@ -48,7 +49,15 @@ func main() {
 		fatal(err)
 	}
 
-	stop := cli.Spinner(fmt.Sprintf("Requesting %d suggestions from %s", cfg.Suggestions, cfg.Model))
+    // Show which staged files are included in the diff (for transparency)
+    if files, err := git.StagedFiles(); err == nil && len(files) > 0 {
+        fmt.Printf("%s%s Staged changes:%s\n", cli.ColorGray, cli.ColorBold, cli.ColorReset)
+        for _, f := range files {
+            fmt.Printf("  %s- %s%s\n", cli.ColorYellow, f, cli.ColorReset)
+        }
+    }
+
+    stop := cli.Spinner(fmt.Sprintf("Requesting %d suggestions from %s", cfg.Suggestions, cfg.Model))
 	var apiKey string
 	if cfg.Provider == "claude" {
 		apiKey = config.Get(config.EnvClaudeAPIKey)

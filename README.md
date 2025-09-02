@@ -52,7 +52,7 @@ Create a stable symlink so rebuilds update in place:
 ```bash
 bash scripts/build.sh
 sudo bash scripts/install.sh   # creates /usr/local/bin/aic -> dist/<platform>/aic
-aic --version                  # prints: aic master
+aic --version                  # prints: aic 1.0.0
 ```
 
 If `/usr/local/bin` is unavailable, it falls back to `~/.local/bin/aic`. Ensure it’s on `PATH`:
@@ -111,10 +111,10 @@ aic --no-color
 export AIC_NO_COLOR=1; aic
 ```
 
-Show version label (always "master"):
+Show version label:
 
 ```bash
-aic --version  # prints: aic master
+aic --version  # prints: aic 1.0.0
 ```
 
 ### Interactive selection and recursive combine

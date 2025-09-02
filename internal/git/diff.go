@@ -1,11 +1,11 @@
 package git
 
 import (
-	"bytes"
-	"errors"
-	"fmt"
-	"os/exec"
-	"strings"
+    "bytes"
+    "errors"
+    "fmt"
+    "os/exec"
+    "strings"
 )
 
 // StagedDiff returns the staged (cached) git diff using minimal unified output.
@@ -55,5 +55,49 @@ func insideRepo() error {
 	if val != "true" {
 		return errors.New("not inside a git work tree")
 	}
-	return nil
+    return nil
+}
+
+// StagedFiles returns the list of files included in the staged diff.
+// It prefers --cached/--staged and falls back to name-only without it (which may include unstaged).
+func StagedFiles() ([]string, error) {
+    if err := insideRepo(); err != nil {
+        return nil, err
+    }
+
+    variants := [][]string{
+        {"diff", "--name-only", "--cached"},
+        {"diff", "--name-only", "--staged"}, // alias
+        {"diff", "--name-only"},              // fallback (may include unstaged)
+    }
+
+    var outStr string
+    for i, args := range variants {
+        cmd := exec.Command("git", args...)
+        var out bytes.Buffer
+        cmd.Stdout = &out
+        cmd.Stderr = &out
+        if err := cmd.Run(); err != nil {
+            if strings.Contains(out.String(), "unknown option") && i < 2 {
+                // try next variant on unknown option
+                continue
+            }
+            return nil, fmt.Errorf("git diff --name-only failed (%v): %w: %s", args, err, out.String())
+        }
+        outStr = out.String()
+        break
+    }
+    if strings.TrimSpace(outStr) == "" {
+        return []string{}, nil
+    }
+    lines := strings.Split(outStr, "\n")
+    files := make([]string, 0, len(lines))
+    for _, ln := range lines {
+        ln = strings.TrimSpace(ln)
+        if ln == "" {
+            continue
+        }
+        files = append(files, ln)
+    }
+    return files, nil
 }
