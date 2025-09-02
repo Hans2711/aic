@@ -56,6 +56,36 @@ xattr -d com.apple.quarantine /usr/local/bin/aic 2>/dev/null || true
 </details>
 
 <details>
+<summary><strong>Windows</strong></summary>
+
+Option 1: Download a prebuilt binary
+
+- Grab `aic_windows_amd64.zip` (or `aic_windows_arm64.zip`) from the latest GitHub Release.
+- Unzip and place `aic.exe` somewhere on your `PATH` (e.g., `C:\Users\<you>\bin`).
+- Ensure Git for Windows is installed and available in `PATH`.
+
+Option 2: Build from source with Go
+
+```powershell
+git clone https://github.com/Hans2711/aic.git
+cd aic
+go build -o aic.exe ./cmd/aic
+```
+
+Verify:
+
+```powershell
+PS> .\aic.exe --version
+```
+
+Notes:
+
+- The interactive UI falls back gracefully on Windows if advanced TTY features aren’t available.
+- Clipboard copy uses `clip` when present (bundled with modern Windows).
+
+</details>
+
+<details>
 <summary><strong>Usage</strong></summary>
 
 ```bash

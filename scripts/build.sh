@@ -21,14 +21,18 @@ echo "Downloading modules into local cache ($GOMODCACHE)" >&2
 go mod download all
 
 build_target() {
-	local goos="$1" goarch="$2" subdir="$3"
-	local outdir="$ROOT_OUT/$subdir"
-	mkdir -p "$outdir"
-	local outfile="$outdir/$APP_NAME"
-	echo "Building ${APP_NAME} for ${goos}/${goarch} -> ${outfile}" >&2
+    local goos="$1" goarch="$2" subdir="$3"
+    local outdir="$ROOT_OUT/$subdir"
+    mkdir -p "$outdir"
+    local outfile="$outdir/$APP_NAME"
+    # On Windows, binaries end with .exe
+    if [ "$goos" = "windows" ]; then
+        outfile+=".exe"
+    fi
+    echo "Building ${APP_NAME} for ${goos}/${goarch} -> ${outfile}" >&2
     GOOS="$goos" GOARCH="$goarch" CGO_ENABLED=0 \
         go build $GOFLAGS -o "$outfile" ./cmd/aic
-	echo "  Done." >&2
+    echo "  Done." >&2
 }
 
 # Targets
@@ -36,6 +40,8 @@ build_target linux amd64 ubuntu
 build_target linux arm64 ubuntu-arm64
 build_target darwin arm64 mac
 build_target darwin amd64 mac-intel
+build_target windows amd64 windows
+build_target windows arm64 windows-arm64
 
 # Checksums
 echo "Generating checksums..." >&2
@@ -46,15 +52,16 @@ checksum_tool() {
 }
 CK_CMD=$(checksum_tool)
 if [ -n "$CK_CMD" ]; then
-	(
-		cd "$ROOT_OUT"
-	# Provide legacy single-path alias for tooling expecting dist/aic
-	if [ -f ubuntu/aic ] && [ ! -e aic ]; then ln -s ubuntu/aic aic; fi
-		rm -f checksums.txt
-		for f in $(find . -type f -name "$APP_NAME"); do
-			$CK_CMD "$f" >> checksums.txt
-		done
-	)
+    (
+        cd "$ROOT_OUT"
+        # Provide legacy single-path alias for tooling expecting dist/aic
+        if [ -f ubuntu/aic ] && [ ! -e aic ]; then ln -s ubuntu/aic aic; fi
+        rm -f checksums.txt
+        # Include both Unix and Windows binary names in checksums
+        while IFS= read -r -d '' f; do
+            $CK_CMD "$f" >> checksums.txt
+        done < <(find . -type f \( -name "$APP_NAME" -o -name "$APP_NAME.exe" \) -print0)
+    )
 	echo "Checksums written to $ROOT_OUT/checksums.txt" >&2
 else
 	echo "No checksum tool found (sha256sum/shasum). Skipping." >&2

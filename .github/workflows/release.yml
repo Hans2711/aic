@@ -34,6 +34,11 @@ jobs:
           chmod +x scripts/package_deb.sh
           VERSION="$AIC_VERSION" bash scripts/package_deb.sh
 
+      - name: Package Windows zip
+        run: |
+          chmod +x scripts/package_zip.sh
+          bash scripts/package_zip.sh
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -41,5 +46,9 @@ jobs:
           name: aic v${{ env.AIC_VERSION }}
           files: |
             dist/deb/*.deb
+            dist/windows/aic.exe
+            dist/windows-arm64/aic.exe
+            dist/aic_windows_amd64.zip
+            dist/aic_windows_arm64.zip
           generate_release_notes: true
           overwrite: true
