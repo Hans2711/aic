@@ -1,0 +1,44 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - '*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          check-latest: true
+          cache: true
+
+      - name: Build release binaries
+        run: bash scripts/build.sh
+
+      - name: Determine version from tag
+        run: |
+          echo "AIC_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+
+      - name: Package .deb
+        run: |
+          chmod +x scripts/package_deb.sh
+          VERSION="$AIC_VERSION" bash scripts/package_deb.sh
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: aic v${{ env.AIC_VERSION }}
+          files: |
+            dist/deb/*.deb
+          generate_release_notes: true
