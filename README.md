@@ -86,6 +86,35 @@ Notes:
 </details>
 
 <details>
+<summary><strong>Linux AppImage</strong></summary>
+
+Build AppImage artifacts locally (requires Linux):
+
+```bash
+# 1) Build binaries
+bash scripts/build.sh
+
+# 2) Package AppImage (downloads appimagetool automatically)
+bash scripts/package_appimage.sh
+
+# Outputs:
+#   dist/aic_linux_amd64.AppImage
+#   dist/aic_linux_arm64.AppImage
+
+# Run the AppImage
+chmod +x dist/aic_linux_amd64.AppImage
+./dist/aic_linux_amd64.AppImage --version
+```
+
+Notes:
+
+- The AppImage contains a static Go binary (CGO disabled), so it runs on most modern distros.
+- The AppImage is CLI‑oriented (Terminal=true); it launches `aic` in your terminal.
+- The packager uses APPIMAGE_EXTRACT_AND_RUN=1 to avoid a FUSE requirement.
+
+</details>
+
+<details>
 <summary><strong>Usage</strong></summary>
 
 ```bash
