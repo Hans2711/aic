@@ -90,7 +90,7 @@ func buildHelp() string {
         {"OPENAI_API_KEY", "(required for provider=openai) OpenAI API key"},
         {"CLAUDE_API_KEY", "(required for provider=claude) Claude API key"},
         {"AIC_MODEL", "(optional) Model [default depends on provider]"},
-        {"AIC_SUGGESTIONS", "(optional) Suggestions count 1-10 [default: 5]"},
+        {"AIC_SUGGESTIONS", "(optional) Suggestions count 1-10 [default: 5; non-interactive: 1]"},
         {"AIC_PROVIDER", "(optional) Provider [openai|claude] (default: auto-detect from keys; both -> openai)"},
         {"AIC_DEBUG", "(optional) Set to 1 for raw response debug"},
         {"AIC_MOCK", "(optional) Set to 1 for mock suggestions (no API call)"},

@@ -93,7 +93,7 @@ Providers and models:
 
 Generation & UX:
 
-- `AIC_SUGGESTIONS`: number of suggestions (1–10, default 5).
+- `AIC_SUGGESTIONS`: number of suggestions (1–10, default 5; non-interactive default: 1).
 - `AIC_NO_COLOR`: disable colors (same as `--no-color`).
 - `-s "..."`: extra instruction appended to the prompt.
 
@@ -152,4 +152,3 @@ export AIC_DEBUG_SUMMARY=1
 ```
 
 </details>
-
