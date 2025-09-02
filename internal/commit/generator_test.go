@@ -6,13 +6,14 @@ import (
 
 // NOTE: This test only validates configuration parsing without calling the API.
 func TestLoadConfig(t *testing.T) {
+    t.Setenv("AIC_DISABLE_REPO_CONFIG", "1")
     // Isolate from any real ~/.aic.json to keep expectations stable
     t.Setenv("HOME", t.TempDir())
-    t.Setenv("AIC_MODEL", "test-model")
-    t.Setenv("AIC_SUGGESTIONS", "10")
-    cfg, _ := LoadConfig("extra")
-    if cfg.Model != "test-model" {
-        t.Fatalf("expected model override, got %s", cfg.Model)
+	t.Setenv("AIC_MODEL", "test-model")
+	t.Setenv("AIC_SUGGESTIONS", "10")
+	cfg, _ := LoadConfig("extra")
+	if cfg.Model != "test-model" {
+		t.Fatalf("expected model override, got %s", cfg.Model)
 	}
 	if cfg.Suggestions != 10 {
 		t.Fatalf("expected suggestions=10 got %d", cfg.Suggestions)
@@ -23,7 +24,8 @@ func TestLoadConfig(t *testing.T) {
 }
 
 func TestLoadConfigBounds(t *testing.T) {
-	t.Setenv("AIC_MODEL", "")
+    t.Setenv("AIC_DISABLE_REPO_CONFIG", "1")
+    t.Setenv("AIC_MODEL", "")
 	t.Setenv("AIC_SUGGESTIONS", "999") // out of range, should fallback
 	cfg, _ := LoadConfig("")
 	if cfg.Suggestions != defaultSuggestions {

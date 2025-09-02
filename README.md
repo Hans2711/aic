@@ -1,6 +1,6 @@
 # aic
 
-AI‑assisted git commit message generator with an iterative “combine” workflow and first‑class OpenAI, Claude, Gemini, and custom server support.
+AI‑assisted git commit message generator with an iterative “combine” workflow, an AI‑powered “analyze” command that learns your repo’s style presets, and first‑class OpenAI, Claude, Gemini, and custom server support.
 
 ![AIC example](example.png)
 
@@ -9,6 +9,9 @@ AI‑assisted git commit message generator with an iterative “combine” workf
 ```bash
 # choose a provider (auto‑detected if set)
 export OPENAI_API_KEY=sk-...   # or: export CLAUDE_API_KEY=sk-... or: export GEMINI_API_KEY=sk-...
+
+# optional: infer this repo's commit style and save .aic.json (used as presets)
+aic analyze
 
 # generate commit messages for staged changes
 aic
@@ -32,6 +35,7 @@ git commit -m aic
 - CI‑ready: non‑interactive mode and optional auto‑commit.
 - Large diffs: structured summary plus clearly truncated raw diff with cutoff notes.
 - Mock mode: `AIC_MOCK=1` for deterministic, offline suggestions.
+- AI‑powered analyze: learns your repo’s style from `git log` and writes a repo `.aic.json` `instructions` used for future commits (merged with home `~/.aic.json` and `-s`).
 
 <details>
 <summary><strong>Install</strong></summary>
@@ -61,6 +65,31 @@ xattr -d com.apple.quarantine /usr/local/bin/aic 2>/dev/null || true
 </details>
 
 <details>
+<summary><strong>Analyze</strong></summary>
+
+Use AI to infer your repository’s commit message conventions and save them as repo‑local presets.
+
+Usage:
+
+```bash
+aic analyze [--limit N]   # default N=1000 recent subjects
+```
+
+What it does:
+
+- Reads recent non‑merge commit subjects and asks your configured provider to synthesize concise style instructions.
+- Writes/updates `<repo>/.aic.json` with an `instructions` string.
+- These repo instructions are merged with home `~/.aic.json` and CLI `-s` in this order: repo → home → CLI.
+
+Notes:
+
+- Requires a provider API key (OpenAI, Claude, Gemini, or Custom) set in the environment.
+- Only commit subjects are sent (no bodies) to minimize prompt size.
+- You can tweak `.aic.json` manually after generation.
+
+</details>
+
+<details>
 <summary><strong>Team Presets (~/.aic.json)</strong></summary>
 
 Share a common commit style across your team via a simple JSON file placed in each developer’s home directory:
@@ -73,7 +102,7 @@ File: `~/.aic.json`
 }
 ```
 
-If set, `instructions` is appended to the AI system prompt for both the initial suggestions and the combine step. You can still add ad‑hoc guidance with `-s "..."`; both are merged (global first, then CLI).
+If set, `instructions` is appended to the AI system prompt for both the initial suggestions and the combine step. You can still add ad‑hoc guidance with `-s "..."`; both are merged (repo first, then home, then CLI).
 
 Notes:
 
@@ -146,6 +175,7 @@ Notes:
 
 ```bash
 aic [-s "extra instruction"] [--version] [--no-color]
+aic analyze [--limit N]   # infer repo style and write .aic.json
 ```
 
 Interactive controls:

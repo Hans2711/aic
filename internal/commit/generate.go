@@ -24,19 +24,19 @@ func GenerateSuggestions(cfg Config, apiKey string) ([]string, error) {
 		}
 		return mock, nil
 	}
-    if apiKey == "" {
-        switch cfg.Provider {
-        case "claude":
-            return nil, errors.New("missing CLAUDE_API_KEY")
-        case "gemini":
-            return nil, errors.New("missing GEMINI_API_KEY")
-        case "custom":
-            // Custom provider may not require an API key (e.g., local LM Studio)
-            // Proceed without error.
-        default:
-            return nil, errors.New("missing OPENAI_API_KEY")
-        }
-    }
+	if apiKey == "" {
+		switch cfg.Provider {
+		case "claude":
+			return nil, errors.New("missing CLAUDE_API_KEY")
+		case "gemini":
+			return nil, errors.New("missing GEMINI_API_KEY")
+		case "custom":
+			// Custom provider may not require an API key (e.g., local LM Studio)
+			// Proceed without error.
+		default:
+			return nil, errors.New("missing OPENAI_API_KEY")
+		}
+	}
 	gitDiff, err := git.StagedDiff()
 	if err != nil {
 		return nil, err
@@ -46,16 +46,16 @@ func GenerateSuggestions(cfg Config, apiKey string) ([]string, error) {
 	}
 
 	var p provider.Provider
-    switch cfg.Provider {
-    case "claude":
-        p = provider.NewClaude(apiKey)
-    case "gemini":
-        p = provider.NewGemini(apiKey)
-    case "custom":
-        p = provider.NewCustom(apiKey)
-    default:
-        p = provider.NewOpenAI(apiKey)
-    }
+	switch cfg.Provider {
+	case "claude":
+		p = provider.NewClaude(apiKey)
+	case "gemini":
+		p = provider.NewGemini(apiKey)
+	case "custom":
+		p = provider.NewCustom(apiKey)
+	default:
+		p = provider.NewOpenAI(apiKey)
+	}
 
 	originalDiff := gitDiff
 	const hardLimit = 16000
@@ -83,25 +83,25 @@ func GenerateSuggestions(cfg Config, apiKey string) ([]string, error) {
 		}
 	}
 
-    userContent := composeUserContent(originalDiff, gitDiff, summary)
-    systemMsg := "You generate single-line Conventional Commit messages. " +
-        "Rules: one line per message (<=72 chars), imperative mood, no trailing period; " +
-        "start with a type (feat|fix|refactor|docs|chore|test|perf|build|ci|style) and optional scope; " +
-        "do NOT mention the diff/user/files or explain. No numbering, bullets, quotes, emojis, or reasoning. " +
-        "Output: return ONLY the messages, one per choice. " +
-        "Produce exactly " + strconv.Itoa(cfg.Suggestions) + " distinct options prioritizing the most impactful changes."
+	userContent := composeUserContent(originalDiff, gitDiff, summary)
+	systemMsg := "You generate single-line Conventional Commit messages. " +
+		"Rules: one line per message (<=72 chars), imperative mood, no trailing period; " +
+		"start with a type (feat|fix|refactor|docs|chore|test|perf|build|ci|style) and optional scope; " +
+		"do NOT mention the diff/user/files or explain. No numbering, bullets, quotes, emojis, or reasoning. " +
+		"Output: return ONLY the messages, one per choice. " +
+		"Produce exactly " + strconv.Itoa(cfg.Suggestions) + " distinct options prioritizing the most impactful changes."
 	if cfg.SystemAddition != "" {
 		systemMsg += " Additional user instructions: " + cfg.SystemAddition
 	}
 
-    temp := float32(0.25)
-    resp, err := p.Chat(openai.ChatCompletionRequest{
-        Model:       cfg.Model,
-        Messages:    []openai.Message{{Role: "system", Content: systemMsg}, {Role: "user", Content: userContent}},
-        MaxTokens:   256,
-        N:           cfg.Suggestions,
-        Temperature: &temp,
-    })
+	temp := float32(0.25)
+	resp, err := p.Chat(openai.ChatCompletionRequest{
+		Model:       cfg.Model,
+		Messages:    []openai.Message{{Role: "system", Content: systemMsg}, {Role: "user", Content: userContent}},
+		MaxTokens:   256,
+		N:           cfg.Suggestions,
+		Temperature: &temp,
+	})
 	if err != nil {
 		return nil, err
 	}

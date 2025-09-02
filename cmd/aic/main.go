@@ -1,23 +1,31 @@
 package main
 
 import (
-    "fmt"
-    "os"
-    "strings"
-    "time"
+	"fmt"
+	"os"
+	"strings"
+	"time"
 
-    "github.com/diesi/aic/internal/cli"
-    "github.com/diesi/aic/internal/commit"
-    "github.com/diesi/aic/internal/config"
-    "github.com/diesi/aic/internal/git"
-    "github.com/diesi/aic/internal/version"
+	"github.com/diesi/aic/internal/analyze"
+	"github.com/diesi/aic/internal/cli"
+	"github.com/diesi/aic/internal/commit"
+	"github.com/diesi/aic/internal/config"
+	"github.com/diesi/aic/internal/git"
+	"github.com/diesi/aic/internal/version"
+	"strconv"
 )
 
 func main() {
-    // Environment variables are used directly; no .env file loading.
-    var systemAddition string
-    var hookFile string
-    args := os.Args[1:]
+	// Environment variables are used directly; no .env file loading.
+	var systemAddition string
+	var hookFile string
+	args := os.Args[1:]
+
+	// Subcommand: analyze
+	if len(args) > 0 && (args[0] == "analyze" || args[0] == "analyse") {
+		runAnalyze(args[1:])
+		return
+	}
 
 	// Soft warning for unknown/unused AIC_* variables to catch typos/misconfig
 	config.WarnUnknownAICEnv()
@@ -32,24 +40,24 @@ func main() {
 			fmt.Printf("aic %s\n", version.Get())
 			return
 		}
-        if arg == "--no-color" {
-            cli.DisableColors()
-            // remove the flag from further consideration
-            continue
-        }
-        if arg == "--hook" {
-            if i+1 < len(args) {
-                hookFile = args[i+1]
-            }
-            continue
-        }
-        if arg == "-s" {
-            if i+1 < len(args) {
-                systemAddition = args[i+1]
-                // basic: assumes value isn't another flag
-            }
-        }
-    }
+		if arg == "--no-color" {
+			cli.DisableColors()
+			// remove the flag from further consideration
+			continue
+		}
+		if arg == "--hook" {
+			if i+1 < len(args) {
+				hookFile = args[i+1]
+			}
+			continue
+		}
+		if arg == "-s" {
+			if i+1 < len(args) {
+				systemAddition = args[i+1]
+				// basic: assumes value isn't another flag
+			}
+		}
+	}
 
 	cfg, err := commit.LoadConfig(systemAddition)
 	if err != nil {
@@ -91,32 +99,72 @@ func main() {
 		}
 		fatal(err)
 	}
-    msg, err := commit.PromptUserSelect(suggestions)
+	msg, err := commit.PromptUserSelect(suggestions)
+	if err != nil {
+		fatal(err)
+	}
+	// If invoked as a Git hook, write the message to the given file and exit.
+	if hookFile != "" {
+		if err := os.WriteFile(hookFile, []byte(msg+"\n"), 0644); err != nil {
+			fatal(fmt.Errorf("failed to write hook message file: %w", err))
+		}
+		return
+	}
+	if err := commit.OfferCommit(msg); err != nil {
+		fatal(err)
+	}
+}
+
+func runAnalyze(args []string) {
+    // Defaults
+    limit := 1000
+    // Allow simple flag: --limit N
+    for i := 0; i < len(args); i++ {
+        if args[i] == "--limit" && i+1 < len(args) {
+            if n, err := strconv.Atoi(args[i+1]); err == nil && n > 0 {
+                limit = n
+            }
+            i++
+        }
+    }
+    // Build a config without extra instructions to avoid biasing analysis
+    cfg, err := commit.LoadConfig("")
     if err != nil {
         fatal(err)
     }
-    // If invoked as a Git hook, write the message to the given file and exit.
-    if hookFile != "" {
-        if err := os.WriteFile(hookFile, []byte(msg+"\n"), 0644); err != nil {
-            fatal(fmt.Errorf("failed to write hook message file: %w", err))
-        }
-        return
+    var apiKey string
+    switch cfg.Provider {
+    case "claude":
+        apiKey = config.Get(config.EnvClaudeAPIKey)
+    case "gemini":
+        apiKey = config.Get(config.EnvGeminiAPIKey)
+    case "custom":
+        apiKey = config.Get(config.EnvCustomAPIKey)
+    default:
+        apiKey = config.Get(config.EnvOpenAIAPIKey)
     }
-    if err := commit.OfferCommit(msg); err != nil {
+    res, err := analyze.Analyze(limit, cfg, apiKey)
+    if err != nil {
         fatal(err)
     }
+    if err := config.SaveRepoInstructions(res.Instructions); err != nil {
+        fatal(err)
+    }
+    fmt.Printf("%s%s Wrote repo .aic.json%s\n", cli.ColorGray, cli.ColorBold, cli.ColorReset)
+    fmt.Printf("  %sAnalyzed %d commit subjects and generated style instructions.%s\n", cli.ColorDim, res.SampleTotal, cli.ColorReset)
 }
 
 func buildHelp() string {
-    // Core env rows come from config, then CLI flags, then custom-provider env rows.
-    rows := make([][2]string, 0, 32)
-    rows = append(rows, config.HelpEnvRowsCore()...)
-    rows = append(rows,
-        [2]string{"--version / -v", "Show version and exit"},
-        [2]string{"--no-color", "Disable colored output (alias: AIC_NO_COLOR=1)"},
-        [2]string{"--hook <file>", "Hook mode: write selected message to file and exit"},
-    )
-    rows = append(rows, config.HelpEnvRowsCustom()...)
+	// Core env rows come from config, then CLI flags, then custom-provider env rows.
+	rows := make([][2]string, 0, 32)
+	rows = append(rows, config.HelpEnvRowsCore()...)
+	rows = append(rows,
+		[2]string{"--version / -v", "Show version and exit"},
+		[2]string{"--no-color", "Disable colored output (alias: AIC_NO_COLOR=1)"},
+		[2]string{"--hook <file>", "Hook mode: write selected message to file and exit"},
+		[2]string{"analyze [--limit N]", "Infer repo commit style and write .aic.json"},
+	)
+	rows = append(rows, config.HelpEnvRowsCustom()...)
 	maxVar := 0
 	for _, r := range rows {
 		if len(r[0]) > maxVar {
@@ -128,8 +176,9 @@ func buildHelp() string {
 	b.WriteString(fmt.Sprintf("%sUsage%s:\n", cli.ColorBold, cli.ColorReset))
 	b.WriteString("  aic [-s \"extra instruction\"] [--version] [--no-color]\n\n")
 	b.WriteString(fmt.Sprintf("%sDescription%s:\n", cli.ColorBold, cli.ColorReset))
-	b.WriteString("  Generates conventional Git commit messages based on your staged changes.\n")
-	b.WriteString("  It requests suggestions from an AI model, lets you choose one, then offers to commit.\n\n")
+    b.WriteString("  Generates conventional Git commit messages based on your staged changes.\n")
+    b.WriteString("  It requests suggestions from an AI model, lets you choose one, then offers to commit.\n")
+    b.WriteString("  Also includes 'aic analyze' to infer repo style and write .aic.json presets.\n\n")
 	b.WriteString(fmt.Sprintf("%sArguments & Environment%s:\n", cli.ColorBold, cli.ColorReset))
 	for _, r := range rows {
 		pad := strings.Repeat(" ", maxVar-len(r[0]))

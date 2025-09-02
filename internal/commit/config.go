@@ -1,9 +1,9 @@
 package commit
 
 import (
-    "strings"
+	"strings"
 
-    "github.com/diesi/aic/internal/config"
+	"github.com/diesi/aic/internal/config"
 )
 
 const (
@@ -14,43 +14,47 @@ const (
 )
 
 func defaultModelFor(providerName string) string {
-    switch providerName {
-    case "claude":
-        return defaultClaudeModel
-    case "gemini":
-        return defaultGeminiModel
-    case "custom":
-        // For custom provider, default to OpenAI-compatible model name; users can override via AIC_MODEL.
-        return defaultOpenAIModel
-    default:
-        return defaultOpenAIModel
-    }
+	switch providerName {
+	case "claude":
+		return defaultClaudeModel
+	case "gemini":
+		return defaultGeminiModel
+	case "custom":
+		// For custom provider, default to OpenAI-compatible model name; users can override via AIC_MODEL.
+		return defaultOpenAIModel
+	default:
+		return defaultOpenAIModel
+	}
 }
 
 // Config holds runtime parameters loaded from env.
 type Config struct {
-    Provider       string
-    Model          string
-    Suggestions    int
-    SystemAddition string
+	Provider       string
+	Model          string
+	Suggestions    int
+	SystemAddition string
 }
 
 func LoadConfig(systemAddition string) (Config, error) {
-    // Load optional global instructions from ~/.aic.json and merge with CLI-provided additions.
-    // Order: global first, then CLI, joined with a space.
-    // Either may be empty; ensure trimmed output.
-    if uc := config.LoadUserConfig(); uc.Instructions != "" {
-        if strings.TrimSpace(systemAddition) == "" {
-            systemAddition = uc.Instructions
-        } else {
-            systemAddition = strings.TrimSpace(uc.Instructions+" "+systemAddition)
-        }
-    }
-    providerName := strings.ToLower(config.Get(config.EnvAICProvider))
-    if providerName == "" {
-        // Auto-detect provider from available API keys when AIC_PROVIDER is unset.
-        // Priority when multiple are present: OpenAI > Claude > Gemini.
-        hasOpenAI := strings.TrimSpace(config.Get(config.EnvOpenAIAPIKey)) != ""
+	// Load optional repo and user instructions and merge with CLI-provided additions.
+	// Merge order (lowest -> highest precedence): repo, home, CLI.
+	// The final string concatenates non-empty parts with spaces.
+	parts := []string{}
+	if rc := config.LoadRepoConfig(); rc.Instructions != "" {
+		parts = append(parts, rc.Instructions)
+	}
+	if uc := config.LoadUserConfig(); uc.Instructions != "" {
+		parts = append(parts, uc.Instructions)
+	}
+	if strings.TrimSpace(systemAddition) != "" {
+		parts = append(parts, strings.TrimSpace(systemAddition))
+	}
+	systemAddition = strings.TrimSpace(strings.Join(parts, " "))
+	providerName := strings.ToLower(config.Get(config.EnvAICProvider))
+	if providerName == "" {
+		// Auto-detect provider from available API keys when AIC_PROVIDER is unset.
+		// Priority when multiple are present: OpenAI > Claude > Gemini.
+		hasOpenAI := strings.TrimSpace(config.Get(config.EnvOpenAIAPIKey)) != ""
 		hasClaude := strings.TrimSpace(config.Get(config.EnvClaudeAPIKey)) != ""
 		hasGemini := strings.TrimSpace(config.Get(config.EnvGeminiAPIKey)) != ""
 		switch {
@@ -71,13 +75,13 @@ func LoadConfig(systemAddition string) (Config, error) {
 	if config.Bool(config.EnvAICNonInteractive) {
 		cfg.Suggestions = 1
 	}
-    if v := config.Get(config.EnvAICModel); v != "" {
-        cfg.Model = v
-    }
-    // For custom provider, if AIC_MODEL isn't explicitly set, leave model empty and let the provider pick from /v1/models.
-    if cfg.Provider == "custom" && config.Get(config.EnvAICModel) == "" {
-        cfg.Model = ""
-    }
+	if v := config.Get(config.EnvAICModel); v != "" {
+		cfg.Model = v
+	}
+	// For custom provider, if AIC_MODEL isn't explicitly set, leave model empty and let the provider pick from /v1/models.
+	if cfg.Provider == "custom" && config.Get(config.EnvAICModel) == "" {
+		cfg.Model = ""
+	}
 	// Alias: plain gpt-5 -> specific dated release name
 	if cfg.Provider == "openai" && cfg.Model == "gpt-5" {
 		cfg.Model = "gpt-5-2025-08-07"

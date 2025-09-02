@@ -1,0 +1,3 @@
+{
+  "instructions": "``` [commit] type = feat|fix|docs|refactor|chore|test|perf|build|ci|style scope = optional subject = imperative mood, no period, \u003c=72 characters ```"
+}
