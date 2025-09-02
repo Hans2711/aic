@@ -7,6 +7,8 @@ set -u
 MSG_FILE=${1:-}
 SOURCE=${2:-}
 
+"${MSG_FILE:-true}" >/dev/null 2>&1 || true
+
 # Ensure a message file was provided
 if [[ -z "${MSG_FILE}" ]]; then
   exit 0
@@ -17,21 +19,43 @@ if [[ "${AIC_SKIP_HOOK:-}" == "1" ]]; then
   exit 0
 fi
 
-# Skip if commit message is provided explicitly or from special sources
+# Read current message content (strip comments and blank lines)
+content_raw=""
+if [[ -f "${MSG_FILE}" ]]; then
+  # Remove comment lines starting with '#', then trim whitespace-only lines
+  content_raw=$(sed -e '/^#/d' -e '/^[[:space:]]*$/d' "${MSG_FILE}" 2>/dev/null || true)
+fi
+content_trimmed=$(printf '%s' "${content_raw}" | awk 'BEGIN{ORS="\n"} {print}' | head -n1 | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+content_lc=$(printf '%s' "${content_trimmed}" | tr '[:upper:]' '[:lower:]')
+
+# Detect sentinel: user explicitly typed 'aic' as the message
+is_sentinel=0
+if [[ "${content_lc}" =~ ^aic([:!.-].*)?$$ ]] || [[ "${content_lc}" == "aic" ]]; then
+  is_sentinel=1
+fi
+
+# Source-specific behavior
 case "${SOURCE}" in
-  message|merge|squash|commit)
-    # message: -m / -F was used
-    # merge: merge commit
-    # squash: from squash commit
-    # commit: --amend or -c/-C
+  message)
+    # If -m/-F was used, only act if the sentinel 'aic' was provided
+    if [[ ${is_sentinel} -eq 1 ]]; then
+      : # allow running aic below
+    else
+      exit 0
+    fi
+    ;;
+  merge|squash|commit)
+    # merge: merge commit; squash: from squash; commit: --amend or -c/-C
     exit 0
     ;;
 esac
 
-# If the message file already has non-comment, non-empty content, don't overwrite
-if command -v grep >/dev/null 2>&1; then
-  if grep -qE '^[^#[:space:]]' "${MSG_FILE}"; then
-    exit 0
+# If not sentinel and the message already has content, leave it unchanged
+if [[ ${is_sentinel} -eq 0 ]]; then
+  if command -v grep >/dev/null 2>&1; then
+    if grep -qE '^[^#[:space:]]' "${MSG_FILE}"; then
+      exit 0
+    fi
   fi
 fi
 

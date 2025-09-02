@@ -150,6 +150,10 @@ Behavior:
 - If the commit message file already has content, it leaves it unchanged.
 - Writes the selected message into the commit message buffer so you can still edit.
 
+Shortcut:
+
+- Type `git commit -m "aic"` to trigger generation explicitly (the hook replaces the placeholder).
+
 Notes:
 
 - Ensure `aic` is on your `PATH`.
