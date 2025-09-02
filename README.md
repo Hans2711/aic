@@ -2,6 +2,8 @@
 
 AI‑assisted git commit message generator with an iterative “combine” workflow and first‑class OpenAI, Claude, Gemini, and custom server support.
 
+![AIC example](example.png)
+
 ## Quick Start
 
 ```bash
