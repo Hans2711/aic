@@ -31,10 +31,12 @@ AIC_NON_INTERACTIVE=1 AIC_AUTO_COMMIT=1 aic
 <details>
 <summary><strong>Install</strong></summary>
 
-Build and install a symlinked binary:
+Clone, verify, and install (no build required):
 
 ```bash
-bash scripts/build.sh
+git clone https://github.com/Hans2711/aic.git
+cd aic
+./scripts/verify.sh
 sudo bash scripts/install.sh   # /usr/local/bin/aic -> dist/<platform>/aic
 aic --version
 ```
@@ -43,14 +45,6 @@ If `/usr/local/bin` is unavailable, the installer falls back to `~/.local/bin/ai
 
 ```bash
 export PATH="$HOME/.local/bin:$PATH"; hash -r
-```
-
-Verify checksums and see produced artifacts:
-
-```bash
-./scripts/verify.sh
-# outputs like:
-# dist/ubuntu/aic, dist/ubuntu-arm64/aic, dist/mac/aic, dist/mac-intel/aic, dist/checksums.txt
 ```
 
 macOS Gatekeeper (if needed):
