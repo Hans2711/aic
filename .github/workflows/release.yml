@@ -42,3 +42,4 @@ jobs:
           files: |
             dist/deb/*.deb
           generate_release_notes: true
+          overwrite: true

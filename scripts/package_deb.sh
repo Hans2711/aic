@@ -10,6 +10,8 @@ DIST_DIR="$REPO_ROOT/dist"
 DEB_OUT_DIR="$DIST_DIR/deb"
 
 mkdir -p "$DEB_OUT_DIR"
+# Remove any previously generated .deb files to avoid uploading stale ones
+rm -f "$DEB_OUT_DIR"/*.deb 2>/dev/null || true
 
 # Resolve version: prefer $VERSION env, otherwise read from internal/version/version.go
 VERSION="${VERSION:-}"
@@ -45,9 +47,12 @@ Maintainer: aic maintainers <noreply@example.com>
 Description: AI-assisted git commit message generator
 EOF
 
-  local outfile="$DEB_OUT_DIR/${APP_NAME}_${VERSION}_${arch}.deb"
+  # Create versionless output filenames so each build overwrites
+  local outfile="$DEB_OUT_DIR/${APP_NAME}_${arch}.deb"
   dpkg-deb --build "$pkgroot" "$outfile" >/dev/null
   echo "Built $outfile"
+  # Clean build root for this package to keep dist/deb tidy
+  rm -rf "$pkgroot"
 }
 
 # Map our dist layout to Debian arch names
@@ -68,4 +73,3 @@ else
 fi
 
 exit $ret
-
