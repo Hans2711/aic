@@ -9,6 +9,8 @@ class Aic < Formula
   depends_on "go" => :build
 
   def install
+    # Prevent the Go tool from downloading a different toolchain in Homebrew's sandbox.
+    ENV["GOTOOLCHAIN"] = "local"
     system "go", "build", *std_go_args(ldflags: "-s -w"), "./cmd/aic"
   end
 
@@ -17,4 +19,3 @@ class Aic < Formula
     assert_match "aic #{version}", out
   end
 end
-

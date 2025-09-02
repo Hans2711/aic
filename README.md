@@ -81,50 +81,6 @@ Gatekeeper may require unquarantining the binary once:
 ```bash
 xattr -d com.apple.quarantine /usr/local/bin/aic 2>/dev/null || true
 ```
-
-### Homebrew (Tap)
-
-You can install via a personal Homebrew tap. A ready-to-use formula is included at `Formula/aic.rb`.
-
-Publish your tap (one-time):
-
-```bash
-# 1) Create a new repo on GitHub named: homebrew-tap
-#    e.g. https://github.com/Hans2711/homebrew-tap
-
-# 2) In that repo, add this file path and copy the formula from this project:
-#    Formula/aic.rb
-
-# 3) Commit and push the formula to your tap repo
-```
-
-Tag a release and point the formula to it (recommended):
-
-```bash
-# Tag your current commit and push the tag (example: v1.0.0)
-git tag v1.0.0
-git push origin v1.0.0
-
-# Compute the SHA256 of the release tarball and update Formula/aic.rb
-curl -L https://github.com/Hans2711/aic/archive/refs/tags/v1.0.0.tar.gz \
-  | shasum -a 256
-# Replace the url/sha256 in Formula/aic.rb with the tag URL and printed checksum
-```
-
-Install from your tap:
-
-```bash
-brew tap Hans2711/tap
-brew install aic
-aic --version
-```
-
-Notes:
-
-- The included formula currently points at a specific commit and sets `version "1.0.0"`.
-- For Homebrew/homebrew-core submission, prefer a tagged release URL and run: `brew audit --new --strict Formula/aic.rb`.
-- The formula builds from source via Go Modules; Homebrew will fetch dependencies automatically.
-
 ## Usage
 
 ```bash
