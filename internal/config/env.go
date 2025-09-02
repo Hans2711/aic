@@ -9,25 +9,34 @@ import (
 
 // Centralized environment variable keys used by the app
 const (
-	EnvOpenAIAPIKey      = "OPENAI_API_KEY"
-	EnvClaudeAPIKey      = "CLAUDE_API_KEY"
-	EnvGeminiAPIKey      = "GEMINI_API_KEY"
-	EnvAICModel          = "AIC_MODEL"
-	EnvAICSuggestions    = "AIC_SUGGESTIONS"
-	EnvAICMock           = "AIC_MOCK"
-	EnvAICDebug          = "AIC_DEBUG"
-	EnvAICDebugSummary   = "AIC_DEBUG_SUMMARY"
-	EnvAICNonInteractive = "AIC_NON_INTERACTIVE"
-	EnvAICAutoCommit     = "AIC_AUTO_COMMIT"
-	EnvAICNoColor        = "AIC_NO_COLOR"
+    EnvOpenAIAPIKey      = "OPENAI_API_KEY"
+    EnvClaudeAPIKey      = "CLAUDE_API_KEY"
+    EnvGeminiAPIKey      = "GEMINI_API_KEY"
+    // Optional API key for custom provider (may be empty)
+    EnvCustomAPIKey      = "CUSTOM_API_KEY"
+    EnvAICModel          = "AIC_MODEL"
+    EnvAICSuggestions    = "AIC_SUGGESTIONS"
+    EnvAICMock           = "AIC_MOCK"
+    EnvAICDebug          = "AIC_DEBUG"
+    EnvAICDebugSummary   = "AIC_DEBUG_SUMMARY"
+    EnvAICNonInteractive = "AIC_NON_INTERACTIVE"
+    EnvAICAutoCommit     = "AIC_AUTO_COMMIT"
+    EnvAICNoColor        = "AIC_NO_COLOR"
 
 	// Common terminal environment variables (non AIC-specific)
 	EnvNoColor = "NO_COLOR"
 	EnvTerm    = "TERM"
 	EnvColumns = "COLUMNS"
 
-	// Provider selection
-	EnvAICProvider = "AIC_PROVIDER"
+    // Provider selection
+    EnvAICProvider = "AIC_PROVIDER"
+
+    // Custom provider endpoint configuration
+    EnvCustomBaseURL             = "CUSTOM_BASE_URL"              // default: http://127.0.0.1:1234
+    EnvCustomChatCompletionsPath = "CUSTOM_CHAT_COMPLETIONS_PATH" // default: /v1/chat/completions
+    EnvCustomCompletionsPath     = "CUSTOM_COMPLETIONS_PATH"      // default: /v1/completions
+    EnvCustomEmbeddingsPath      = "CUSTOM_EMBEDDINGS_PATH"       // default: /v1/embeddings
+    EnvCustomModelsPath          = "CUSTOM_MODELS_PATH"           // default: /v1/models
 )
 
 // Get returns the raw value for key (empty string if unset).
@@ -73,11 +82,14 @@ func IntInRange(key string, def, min, max int) int {
 // It helps catch typos or stale variables (e.g., AIC_PROVDIER, AIC_PROVIDER).
 // Warnings are printed to stderr.
 func WarnUnknownAICEnv() {
-	known := map[string]struct{}{
-		EnvAICModel: {}, EnvAICSuggestions: {}, EnvAICMock: {}, EnvAICDebug: {},
-		EnvAICDebugSummary: {}, EnvAICNonInteractive: {}, EnvAICAutoCommit: {}, EnvAICNoColor: {},
-		EnvAICProvider: {},
-	}
+    known := map[string]struct{}{
+        EnvAICModel: {}, EnvAICSuggestions: {}, EnvAICMock: {}, EnvAICDebug: {},
+        EnvAICDebugSummary: {}, EnvAICNonInteractive: {}, EnvAICAutoCommit: {}, EnvAICNoColor: {},
+        EnvAICProvider: {},
+        // custom provider configuration keys
+        EnvCustomBaseURL: {}, EnvCustomChatCompletionsPath: {}, EnvCustomCompletionsPath: {},
+        EnvCustomEmbeddingsPath: {}, EnvCustomModelsPath: {}, EnvCustomAPIKey: {},
+    }
 	// List of variables that exist in docs historically but are not currently used
 	unused := map[string]string{}
 	printedHeader := false

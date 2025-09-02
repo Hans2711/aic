@@ -1,6 +1,6 @@
 # aic
 
-AI‑assisted git commit message generator with an iterative “combine” workflow and first‑class OpenAI, Claude, and Gemini support.
+AI‑assisted git commit message generator with an iterative “combine” workflow and first‑class OpenAI, Claude, Gemini, and custom server support.
 
 ## Quick Start
 
@@ -21,7 +21,7 @@ AIC_NON_INTERACTIVE=1 AIC_AUTO_COMMIT=1 aic
 ## Highlights
 
 - Recursive combine: multi‑select suggestions, press Enter to synthesize better options, repeat to refine.
-- Multiple providers: `openai`, `claude`, or `gemini` (auto‑detect; priority openai > claude > gemini).
+- Multiple providers: `openai`, `claude`, `gemini` (auto‑detect; priority openai > claude > gemini), or `custom`.
 - Sensible defaults: OpenAI `gpt-4o-mini`, Claude `claude-3-sonnet-20240229`, Gemini `gemini-1.5-flash` (override with `AIC_MODEL`).
 - Friendly TUI: 1–9/0 to choose, arrows to navigate, Space to multi‑select.
 - CI‑ready: non‑interactive mode and optional auto‑commit.
@@ -109,11 +109,12 @@ export AIC_NO_COLOR=1; aic
 <details>
 <summary><strong>Configuration</strong></summary>
 
-Providers and models:
+ Providers and models:
 
-- `AIC_PROVIDER`: `openai` | `claude` | `gemini` (auto‑detect from API keys; priority openai > claude > gemini).
-- `OPENAI_API_KEY` / `CLAUDE_API_KEY` / `GEMINI_API_KEY`: required for chosen provider.
-- `AIC_MODEL`: override default model (OpenAI: `gpt-4o-mini`; Claude: `claude-3-sonnet-20240229`; Gemini: `gemini-1.5-flash`).
+ - `AIC_PROVIDER`: `openai` | `claude` | `gemini` | `custom` (auto‑detect from API keys; priority openai > claude > gemini).
+ - `OPENAI_API_KEY` / `CLAUDE_API_KEY` / `GEMINI_API_KEY`: required for chosen provider.
+ - `CUSTOM_API_KEY`: optional; only if your custom server requires it.
+ - `AIC_MODEL`: override default model (OpenAI: `gpt-4o-mini`; Claude: `claude-3-sonnet-20240229`; Gemini: `gemini-1.5-flash`; Custom: set to a model exposed by your server).
 
 Generation & UX:
 
@@ -135,6 +136,34 @@ Debug:
 Large diffs:
 
 - For very large staged diffs, the tool generates a compact “Diff Summary” (using the provider’s default model) and appends a clearly truncated raw diff (~16k chars) with cutoff notes. If summarization fails, it falls back to simple truncation.
+
+</details>
+
+<details>
+<summary><strong>Custom Server (OpenAI‑compatible)</strong></summary>
+
+Use `AIC_PROVIDER=custom` to send requests to a local or remote OpenAI‑compatible server (e.g., LM Studio at `http://127.0.0.1:1234`). If `AIC_MODEL` is unset or set to `auto`, `aic` queries `/v1/models` and picks the first model.
+
+Defaults (override via env):
+
+- `CUSTOM_BASE_URL` = `http://127.0.0.1:1234`
+- `CUSTOM_CHAT_COMPLETIONS_PATH` = `/v1/chat/completions`
+- `CUSTOM_COMPLETIONS_PATH` = `/v1/completions`
+- `CUSTOM_EMBEDDINGS_PATH` = `/v1/embeddings`
+- `CUSTOM_MODELS_PATH` = `/v1/models`
+- `CUSTOM_API_KEY` = optional; if set, sent as `Authorization: Bearer <key>`
+
+Examples (LM Studio):
+
+```bash
+# Auto-pick model from /v1/models
+AIC_PROVIDER=custom CUSTOM_BASE_URL=http://127.0.0.1:1234 aic
+
+# Or specify a model explicitly
+AIC_PROVIDER=custom CUSTOM_BASE_URL=http://127.0.0.1:1234 AIC_MODEL="<model-id>" aic
+```
+
+Tip: run `curl http://127.0.0.1:1234/v1/models` to inspect model IDs.
 
 </details>
 

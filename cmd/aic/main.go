@@ -64,6 +64,8 @@ func main() {
 		apiKey = config.Get(config.EnvClaudeAPIKey)
 	case "gemini":
 		apiKey = config.Get(config.EnvGeminiAPIKey)
+	case "custom":
+		apiKey = config.Get(config.EnvCustomAPIKey) // may be empty for local servers
 	default:
 		apiKey = config.Get(config.EnvOpenAIAPIKey)
 	}
@@ -92,19 +94,25 @@ func main() {
 }
 
 func buildHelp() string {
-	rows := [][2]string{
+    rows := [][2]string{
 		{"OPENAI_API_KEY", "(required for provider=openai) OpenAI API key"},
 		{"CLAUDE_API_KEY", "(required for provider=claude) Claude API key"},
 		{"GEMINI_API_KEY", "(required for provider=gemini) Gemini API key"},
+        {"CUSTOM_API_KEY", "(optional for provider=custom) API key if your server requires it"},
 		{"AIC_MODEL", "(optional) Model [default depends on provider]"},
 		{"AIC_SUGGESTIONS", "(optional) Suggestions count 1-10 [default: 5; non-interactive: 1]"},
-		{"AIC_PROVIDER", "(optional) Provider [openai|claude|gemini] (default: auto-detect from keys; priority openai>claude>gemini)"},
+		{"AIC_PROVIDER", "(optional) Provider [openai|claude|gemini|custom] (default: auto-detect from keys; priority openai>claude>gemini)"},
 		{"AIC_DEBUG", "(optional) Set to 1 for raw response debug"},
 		{"AIC_MOCK", "(optional) Set to 1 for mock suggestions (no API call)"},
 		{"AIC_NON_INTERACTIVE", "(optional) 1 to auto-select first suggestion & skip commit"},
 		{"AIC_AUTO_COMMIT", "(optional) With NON_INTERACTIVE=1, also perform the commit"},
 		{"--version / -v", "Show version and exit"},
 		{"--no-color", "Disable colored output (alias: AIC_NO_COLOR=1)"},
+        {"CUSTOM_BASE_URL", "(custom) Base URL [default: http://127.0.0.1:1234]"},
+        {"CUSTOM_CHAT_COMPLETIONS_PATH", "(custom) Chat endpoint path [default: /v1/chat/completions]"},
+        {"CUSTOM_COMPLETIONS_PATH", "(custom) Completions path [default: /v1/completions]"},
+        {"CUSTOM_EMBEDDINGS_PATH", "(custom) Embeddings path [default: /v1/embeddings]"},
+        {"CUSTOM_MODELS_PATH", "(custom) Models path [default: /v1/models]"},
 	}
 	maxVar := 0
 	for _, r := range rows {

@@ -14,14 +14,17 @@ const (
 )
 
 func defaultModelFor(providerName string) string {
-	switch providerName {
-	case "claude":
-		return defaultClaudeModel
-	case "gemini":
-		return defaultGeminiModel
-	default:
-		return defaultOpenAIModel
-	}
+    switch providerName {
+    case "claude":
+        return defaultClaudeModel
+    case "gemini":
+        return defaultGeminiModel
+    case "custom":
+        // For custom provider, default to OpenAI-compatible model name; users can override via AIC_MODEL.
+        return defaultOpenAIModel
+    default:
+        return defaultOpenAIModel
+    }
 }
 
 // Config holds runtime parameters loaded from env.
@@ -58,9 +61,13 @@ func LoadConfig(systemAddition string) (Config, error) {
 	if config.Bool(config.EnvAICNonInteractive) {
 		cfg.Suggestions = 1
 	}
-	if v := config.Get(config.EnvAICModel); v != "" {
-		cfg.Model = v
-	}
+    if v := config.Get(config.EnvAICModel); v != "" {
+        cfg.Model = v
+    }
+    // For custom provider, if AIC_MODEL isn't explicitly set, leave model empty and let the provider pick from /v1/models.
+    if cfg.Provider == "custom" && config.Get(config.EnvAICModel) == "" {
+        cfg.Model = ""
+    }
 	// Alias: plain gpt-5 -> specific dated release name
 	if cfg.Provider == "openai" && cfg.Model == "gpt-5" {
 		cfg.Model = "gpt-5-2025-08-07"
