@@ -61,6 +61,28 @@ xattr -d com.apple.quarantine /usr/local/bin/aic 2>/dev/null || true
 </details>
 
 <details>
+<summary><strong>Team Presets (~/.aic.json)</strong></summary>
+
+Share a common commit style across your team via a simple JSON file placed in each developer’s home directory:
+
+File: `~/.aic.json`
+
+```json
+{
+  "instructions": "Use imperative mood, keep <=72 chars, prefer feat|fix|docs|refactor scopes, no trailing period."
+}
+```
+
+If set, `instructions` is appended to the AI system prompt for both the initial suggestions and the combine step. You can still add ad‑hoc guidance with `-s "..."`; both are merged (global first, then CLI).
+
+Notes:
+
+- The file is optional; if missing or invalid, `aic` continues with defaults.
+- Only the `instructions` key is read today; more keys may be supported later.
+
+</details>
+
+<details>
 <summary><strong>Windows</strong></summary>
 
 Option 1: Download a prebuilt binary

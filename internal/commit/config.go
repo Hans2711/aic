@@ -1,9 +1,9 @@
 package commit
 
 import (
-	"strings"
+    "strings"
 
-	"github.com/diesi/aic/internal/config"
+    "github.com/diesi/aic/internal/config"
 )
 
 const (
@@ -29,18 +29,28 @@ func defaultModelFor(providerName string) string {
 
 // Config holds runtime parameters loaded from env.
 type Config struct {
-	Provider       string
-	Model          string
-	Suggestions    int
-	SystemAddition string
+    Provider       string
+    Model          string
+    Suggestions    int
+    SystemAddition string
 }
 
 func LoadConfig(systemAddition string) (Config, error) {
-	providerName := strings.ToLower(config.Get(config.EnvAICProvider))
-	if providerName == "" {
-		// Auto-detect provider from available API keys when AIC_PROVIDER is unset.
-		// Priority when multiple are present: OpenAI > Claude > Gemini.
-		hasOpenAI := strings.TrimSpace(config.Get(config.EnvOpenAIAPIKey)) != ""
+    // Load optional global instructions from ~/.aic.json and merge with CLI-provided additions.
+    // Order: global first, then CLI, joined with a space.
+    // Either may be empty; ensure trimmed output.
+    if uc := config.LoadUserConfig(); uc.Instructions != "" {
+        if strings.TrimSpace(systemAddition) == "" {
+            systemAddition = uc.Instructions
+        } else {
+            systemAddition = strings.TrimSpace(uc.Instructions+" "+systemAddition)
+        }
+    }
+    providerName := strings.ToLower(config.Get(config.EnvAICProvider))
+    if providerName == "" {
+        // Auto-detect provider from available API keys when AIC_PROVIDER is unset.
+        // Priority when multiple are present: OpenAI > Claude > Gemini.
+        hasOpenAI := strings.TrimSpace(config.Get(config.EnvOpenAIAPIKey)) != ""
 		hasClaude := strings.TrimSpace(config.Get(config.EnvClaudeAPIKey)) != ""
 		hasGemini := strings.TrimSpace(config.Get(config.EnvGeminiAPIKey)) != ""
 		switch {
