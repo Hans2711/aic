@@ -46,9 +46,8 @@ jobs:
           name: aic v${{ env.AIC_VERSION }}
           files: |
             dist/deb/*.deb
-            dist/windows/aic.exe
-            dist/windows-arm64/aic.exe
             dist/aic_windows_amd64.zip
             dist/aic_windows_arm64.zip
           generate_release_notes: true
-          overwrite: true
+          # Note: do not upload raw aic.exe twice (identical asset names).
+          # Only zipped artifacts are published for Windows to avoid conflicts.
