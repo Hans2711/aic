@@ -16,6 +16,9 @@ aic -s "Focus on auth refactor and migrations"
 
 # CI mode (no prompts) and auto‑commit
 AIC_NON_INTERACTIVE=1 AIC_AUTO_COMMIT=1 aic
+
+# Git Hook
+git commit -m aic
 ```
 
 ## Highlights
