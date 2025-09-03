@@ -6,11 +6,32 @@ set -euo pipefail
 # When REAL=1 and OPENAI_API_KEY is present, it will exercise real summarization + suggestions.
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BIN="$ROOT_DIR/dist/aic"
-if [[ ! -x "$BIN" ]]; then
-  echo "Building binary..." >&2
-  "$ROOT_DIR/scripts/build.sh" >/dev/null
+
+# Prefer repo-local build for host platform, then ensure `aic` exists
+OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
+ARCH="$(uname -m)"
+HOST_DIR=""
+case "$OS" in
+  darwin)
+    if [[ "$ARCH" == "arm64" ]]; then HOST_DIR="mac"; else HOST_DIR="mac-intel"; fi ;;
+  linux)
+    if [[ "$ARCH" == "aarch64" || "$ARCH" == "arm64" ]]; then HOST_DIR="ubuntu-arm64"; else HOST_DIR="ubuntu"; fi ;;
+esac
+if [[ -n "$HOST_DIR" && -x "$ROOT_DIR/dist/$HOST_DIR/aic" ]]; then
+  PATH="$ROOT_DIR/dist/$HOST_DIR:$PATH"
 fi
+if ! command -v aic >/dev/null 2>&1; then
+  echo "Building binary..." >&2
+  bash "$ROOT_DIR/scripts/build.sh" >/dev/null
+  if [[ -n "$HOST_DIR" && -x "$ROOT_DIR/dist/$HOST_DIR/aic" ]]; then
+    PATH="$ROOT_DIR/dist/$HOST_DIR:$PATH"
+  fi
+fi
+if ! command -v aic >/dev/null 2>&1; then
+  echo "aic binary not found on PATH. Install or build it and ensure it's available (e.g., run scripts/install.sh)." >&2
+  exit 1
+fi
+echo "Using aic at: $(command -v aic)" >&2
 
 # Create / modify a large dummy file
 LARGE_FILE="large_dummy_test.txt"
@@ -44,11 +65,11 @@ if [[ "${REAL:-}" == "1" ]]; then
     echo "REAL=1 but OPENAI_API_KEY not set" >&2; exit 1
   fi
   echo "Running real summarization test (this will call API)..." >&2
-  AIC_NON_INTERACTIVE=1 AIC_DEBUG_SUMMARY=1 OPENAI_API_KEY="$OPENAI_API_KEY" "$BIN" -s "Test large diff summarization" || {
+  AIC_NON_INTERACTIVE=1 AIC_DEBUG=1 OPENAI_API_KEY="$OPENAI_API_KEY" aic -s "Test large diff summarization" || {
     echo "Large diff summarization test FAILED" >&2; exit 1; }
 else
   echo "Running mock summarization test (AIC_MOCK=1)..." >&2
-  AIC_MOCK=1 AIC_NON_INTERACTIVE=1 AIC_DEBUG_SUMMARY=1 OPENAI_API_KEY="sk-mock" "$BIN" -s "Mock large diff summarization" || {
+  AIC_NON_INTERACTIVE=1 AIC_DEBUG=1 aic -s "Mock large diff summarization" || {
     echo "Mock large diff summarization test FAILED" >&2; exit 1; }
 fi
 

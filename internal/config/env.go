@@ -17,8 +17,7 @@ const (
 	EnvAICModel          = "AIC_MODEL"
 	EnvAICSuggestions    = "AIC_SUGGESTIONS"
 	EnvAICMock           = "AIC_MOCK"
-	EnvAICDebug          = "AIC_DEBUG"
-	EnvAICDebugSummary   = "AIC_DEBUG_SUMMARY"
+    EnvAICDebug          = "AIC_DEBUG"
 	EnvAICNonInteractive = "AIC_NON_INTERACTIVE"
 	EnvAICAutoCommit     = "AIC_AUTO_COMMIT"
     EnvAICNoColor        = "AIC_NO_COLOR"
@@ -118,7 +117,7 @@ func IntInRange(key string, def, min, max int) int {
 func WarnUnknownAICEnv() {
     known := map[string]struct{}{
         EnvAICModel: {}, EnvAICSuggestions: {}, EnvAICMock: {}, EnvAICDebug: {},
-        EnvAICDebugSummary: {}, EnvAICNonInteractive: {}, EnvAICAutoCommit: {}, EnvAICNoColor: {},
+        EnvAICNonInteractive: {}, EnvAICAutoCommit: {}, EnvAICNoColor: {},
         EnvAICProvider: {}, EnvAICDisableRepoConfig: {},
         // custom provider configuration keys
         EnvCustomBaseURL: {}, EnvCustomChatCompletionsPath: {}, EnvCustomCompletionsPath: {},

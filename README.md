@@ -242,8 +242,7 @@ Run modes:
 
 Debug:
 
-- `AIC_DEBUG=1`: verbose error details.
-- `AIC_DEBUG_SUMMARY=1`: debug output during large‑diff summarization.
+- `AIC_DEBUG=1`: verbose debug details, including large‑diff summarization info and content.
 
 Large diffs:
 
@@ -336,7 +335,7 @@ export OPENAI_API_KEY=sk-...; REAL=1 bash scripts/test_large_diff.sh
 Enable extra debug during summary:
 
 ```bash
-export AIC_DEBUG_SUMMARY=1
+export AIC_DEBUG=1
 ```
 
 </details>

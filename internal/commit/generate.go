@@ -77,10 +77,10 @@ func GenerateSuggestions(cfg Config, apiKey string) ([]string, error) {
 				gitDiff = gitDiff[:hardLimit]
 			}
 		}
-		if summary != "" && config.Bool(config.EnvAICDebugSummary) {
-			fmt.Fprintf(os.Stderr, "%s\n[debug] diff summarized (orig=%d chars, shown=%d)\n%s\n", cli.ColorDim, len(originalDiff), len(gitDiff), cli.ColorReset)
-			fmt.Fprintf(os.Stderr, "===== DIFF SUMMARY DEBUG START =====\n%s\n===== DIFF SUMMARY DEBUG END =====\n", summary)
-		}
+        if summary != "" && config.Bool(config.EnvAICDebug) {
+            fmt.Fprintf(os.Stderr, "%s\n[debug] diff summarized (orig=%d chars, shown=%d)\n%s\n", cli.ColorDim, len(originalDiff), len(gitDiff), cli.ColorReset)
+            fmt.Fprintf(os.Stderr, "===== DIFF SUMMARY DEBUG START =====\n%s\n===== DIFF SUMMARY DEBUG END =====\n", summary)
+        }
 	}
 
 	userContent := composeUserContent(originalDiff, gitDiff, summary)
