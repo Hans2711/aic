@@ -142,7 +142,7 @@ func PromptUserSelect(suggestions []string) (string, error) {
 		if countChecked() >= 2 {
 			multi = fmt.Sprintf(" – %d selected; Enter combines", countChecked())
 		}
-		fmt.Printf("%sUse ↑/↓, Space to toggle select, numbers to pick (1-9%s), Enter to confirm%s.%s\n", cli.ColorDim, extra, multi, cli.ColorReset)
+        fmt.Printf("%sUse ↑/↓ or j/k, Space to toggle select, numbers to pick (1-9%s), Enter to confirm%s.%s\n", cli.ColorDim, extra, multi, cli.ColorReset)
 	}
 
 	// Initial render

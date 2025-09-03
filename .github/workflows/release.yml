@@ -14,6 +14,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Need full history to switch to default branch and push changes back
+          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -43,6 +46,55 @@ jobs:
         run: |
           chmod +x scripts/package_zip.sh
           bash scripts/package_zip.sh
+
+      - name: Commit artifacts into repo dist/
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          # Stage artifacts from this run (avoid losing them when switching branches)
+          STAGE_DIR="/tmp/aic-artifacts"
+          mkdir -p "$STAGE_DIR"
+          shopt -s nullglob
+          cp -f dist/*.AppImage "$STAGE_DIR" 2>/dev/null || true
+          cp -f dist/*.zip "$STAGE_DIR"       2>/dev/null || true
+          mkdir -p "$STAGE_DIR/deb"
+          cp -f dist/deb/*.deb "$STAGE_DIR/deb" 2>/dev/null || true
+          [ -f dist/checksums.txt ] && cp -f dist/checksums.txt "$STAGE_DIR/" || true
+
+          # Determine default branch with fallback
+          BRANCH="${DEFAULT_BRANCH:-master}"
+
+          # Switch to default branch and pull latest
+          git fetch origin "$BRANCH"
+          git checkout "$BRANCH"
+          git pull --ff-only origin "$BRANCH"
+
+          # Restore artifacts into dist/
+          mkdir -p dist dist/deb
+          cp -f "$STAGE_DIR"/*.AppImage dist/ 2>/dev/null || true
+          cp -f "$STAGE_DIR"/*.zip dist/       2>/dev/null || true
+          cp -f "$STAGE_DIR"/checksums.txt dist/ 2>/dev/null || true
+          cp -f "$STAGE_DIR"/deb/*.deb dist/deb/ 2>/dev/null || true
+
+          # Configure git identity for CI
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Add only curated artifacts, not raw build dirs
+          git add -f dist/*.AppImage || true
+          git add -f dist/*.zip || true
+          git add -f dist/checksums.txt || true
+          git add -f dist/deb/*.deb || true
+
+          # Commit and push if there are changes
+          if ! git diff --staged --quiet; then
+            git commit -m "ci(release): update artifacts for ${{ github.ref_name }}"
+            git push origin "HEAD:$BRANCH"
+            echo "Pushed updated artifacts to $BRANCH"
+          else
+            echo "No artifact changes to commit."
+          fi
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

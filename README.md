@@ -31,7 +31,7 @@ git commit -m aic
 - Recursive combine: multi‑select suggestions, press Enter to synthesize better options, repeat to refine.
 - Multiple providers: `openai`, `claude`, `gemini` (auto‑detect; priority openai > claude > gemini), or `custom`.
 - Sensible defaults: OpenAI `gpt-4o-mini`, Claude `claude-3-sonnet-20240229`, Gemini `gemini-1.5-flash` (override with `AIC_MODEL`).
-- Friendly TUI: 1–9/0 to choose, arrows to navigate, Space to multi‑select.
+- Friendly TUI: 1–9/0 to choose, arrows or j/k to navigate, Space to multi‑select.
 - CI‑ready: non‑interactive mode and optional auto‑commit.
 - Large diffs: structured summary plus clearly truncated raw diff with cutoff notes.
 - Mock mode: `AIC_MOCK=1` for deterministic, offline suggestions.
