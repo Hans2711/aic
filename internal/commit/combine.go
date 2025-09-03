@@ -1,14 +1,15 @@
 package commit
 
 import (
-	"errors"
-	"fmt"
-	"strings"
+    "errors"
+    "fmt"
+    "os"
+    "strings"
 
-	"github.com/diesi/aic/internal/cli"
-	"github.com/diesi/aic/internal/config"
-	"github.com/diesi/aic/internal/openai"
-	"github.com/diesi/aic/internal/provider"
+    "github.com/diesi/aic/internal/cli"
+    "github.com/diesi/aic/internal/config"
+    "github.com/diesi/aic/internal/openai"
+    "github.com/diesi/aic/internal/provider"
 )
 
 // GenerateCombinedSuggestions asks the AI to combine multiple commit messages
@@ -51,12 +52,16 @@ func GenerateCombinedSuggestions(cfg Config, apiKey string, selected []string) (
 	default:
 		p = provider.NewOpenAI(apiKey)
 	}
-	systemMsg := "You are a helpful assistant that synthesizes multiple draft commit messages into improved conventional commit suggestions. " +
-		"Given several commit messages that may overlap, produce distinct, concise, high-quality alternatives (max 30 tokens each). " +
-		"No line breaks; return ONLY the commit messages, one per choice, with no numbering or bullets."
-	if cfg.SystemAddition != "" {
-		systemMsg += " Additional user instructions: " + cfg.SystemAddition
-	}
+    systemMsg := "You are a helpful assistant that synthesizes multiple draft commit messages into improved conventional commit suggestions. " +
+        "Given several commit messages that may overlap, produce distinct, concise, high-quality alternatives (max 30 tokens each). " +
+        "No line breaks; return ONLY the commit messages, one per choice, with no numbering or bullets."
+    if cfg.SystemAddition != "" {
+        systemMsg += " Additional user instructions: " + cfg.SystemAddition
+    }
+    if config.Bool(config.EnvAICDebug) {
+        fmt.Fprintln(os.Stderr, "[aic][debug] system prompt for combine:")
+        fmt.Fprintln(os.Stderr, systemMsg)
+    }
 	userContent := "Combine and refine these commit messages into consolidated alternatives:\n\n" + strings.Join(selected, "\n")
 
 	temp := float32(0.4)

@@ -80,11 +80,11 @@ func generateInstructions(cfg commit.Config, apiKey string, subjects []string) (
 		p = provider.NewOpenAI(apiKey)
 	}
 
-	// Prepare the prompt. Ask for a single-line or compact, sentence-like
-	// instruction set that we can store in .aic.json under "instructions".
-	system := "You analyze Git commit history and produce a concise, prescriptive style guide for future commit messages. " +
-		"Infer conventions actually used (types like feat|fix|docs|refactor|chore|test|perf|build|ci|style; whether scope is used; whether subjects end with a period; imperative mood; <=72 char subject). " +
-		"Output only the final instruction text suitable for a config file; do not include examples, lists, or the analyzed messages."
+    // Prepare the prompt. Ask for a single, compact instruction set for .aic.json.
+    system := "You analyze Git commit history and produce a concise, prescriptive style guide for future commit messages. " +
+        "Infer conventions actually used (types like feat|fix|docs|refactor|chore|test|perf|build|ci|style; whether scope is used; whether subjects end with a period; imperative mood; <=72 char subject). " +
+        "Also infer the dominant natural language of the subjects (e.g., English, Spanish, German) and include a brief directive to write messages in that language (e.g., 'Write messages in English.'). " +
+        "Output only the final instruction text suitable for a config file; do not include examples, lists, or the analyzed messages."
 	// Join subjects in a compact block. We only pass subjects, not bodies.
 	user := "Recent commit subjects (one per line):\n" + strings.Join(subjects, "\n")
 

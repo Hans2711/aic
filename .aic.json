@@ -1,3 +1,3 @@
 {
-  "instructions": "``` [commit] type = feat|fix|docs|refactor|chore|test|perf|build|ci|style scope = optional subject = imperative mood, no period, \u003c=72 characters ```"
+  "instructions": "Write commit messages in English. Use the format \u003ctype\u003e(\u003cscope\u003e): \u003csubject\u003e for commit messages. Types include feat, fix, docs, refactor, chore, test, perf, build, ci, and style. Use imperative mood and do not end subjects with a period. Keep the subject line to 72 characters or less."
 }
