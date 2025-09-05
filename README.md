@@ -3,6 +3,7 @@
 AI‑assisted git commit message generator with an iterative “combine” workflow, an AI‑powered “analyze” command that learns your repo’s style presets, and first‑class OpenAI, Claude, Gemini, and custom server support.
 
 ![AIC example](example.png)
+![AIC example 2](example2.png)
 
 ## Quick Start
 
