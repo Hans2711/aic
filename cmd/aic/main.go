@@ -30,34 +30,34 @@ func main() {
 	// Soft warning for unknown/unused AIC_* variables to catch typos/misconfig
 	config.WarnUnknownAICEnv()
 
-	// Simple flag parsing
-	for i, arg := range args {
-		if arg == "-h" || arg == "--help" || arg == "help" {
-			fmt.Print(buildHelp())
-			return
-		}
-		if arg == "--version" || arg == "-v" {
-			fmt.Printf("aic %s\n", version.Get())
-			return
-		}
-		if arg == "--no-color" {
-			cli.DisableColors()
-			// remove the flag from further consideration
-			continue
-		}
-		if arg == "--hook" {
-			if i+1 < len(args) {
-				hookFile = args[i+1]
-			}
-			continue
-		}
-		if arg == "-s" {
-			if i+1 < len(args) {
-				systemAddition = args[i+1]
-				// basic: assumes value isn't another flag
-			}
-		}
-	}
+    // Simple, robust flag parsing (skips consumed values)
+    for i := 0; i < len(args); i++ {
+        arg := args[i]
+        switch {
+        case arg == "-h" || arg == "--help" || arg == "help":
+            fmt.Print(buildHelp())
+            return
+        case arg == "--version" || arg == "-v":
+            fmt.Printf("aic %s\n", version.Get())
+            return
+        case arg == "--no-color":
+            cli.DisableColors()
+        case strings.HasPrefix(arg, "--hook="):
+            hookFile = strings.TrimPrefix(arg, "--hook=")
+        case arg == "--hook":
+            if i+1 < len(args) {
+                hookFile = args[i+1]
+                i++
+            }
+        case strings.HasPrefix(arg, "-s="):
+            systemAddition = strings.TrimPrefix(arg, "-s=")
+        case arg == "-s":
+            if i+1 < len(args) {
+                systemAddition = args[i+1]
+                i++
+            }
+        }
+    }
 
 	cfg, err := commit.LoadConfig(systemAddition)
 	if err != nil {

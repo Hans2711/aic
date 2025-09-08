@@ -44,7 +44,7 @@ git commit -m aic
 Clone, verify, and install (no build required):
 
 ```bash
-git clone https://github.com/Hans2711/aic.git
+git clone https://github.com/diesi/aic.git
 cd aic
 ./scripts/verify.sh
 sudo bash scripts/install.sh   # /usr/local/bin/aic -> dist/<platform>/aic
@@ -124,7 +124,7 @@ Option 1: Download a prebuilt binary
 Option 2: Build from source with Go
 
 ```powershell
-git clone https://github.com/Hans2711/aic.git
+git clone https://github.com/diesi/aic.git
 cd aic
 go build -o aic.exe ./cmd/aic
 ```

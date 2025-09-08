@@ -33,25 +33,30 @@ func GenerateCombinedSuggestions(cfg Config, apiKey string, selected []string) (
 		}
 		return out, nil
 	}
-	if apiKey == "" {
-		switch cfg.Provider {
-		case "claude":
-			return nil, errors.New("missing CLAUDE_API_KEY")
-		case "gemini":
-			return nil, errors.New("missing GEMINI_API_KEY")
-		default:
-			return nil, errors.New("missing OPENAI_API_KEY")
-		}
-	}
+    if apiKey == "" {
+        switch cfg.Provider {
+        case "claude":
+            return nil, errors.New("missing CLAUDE_API_KEY")
+        case "gemini":
+            return nil, errors.New("missing GEMINI_API_KEY")
+        case "custom":
+            // Custom providers may not require a key (e.g., local LM Studio)
+            // Proceed without error.
+        default:
+            return nil, errors.New("missing OPENAI_API_KEY")
+        }
+    }
 	var p provider.Provider
-	switch cfg.Provider {
-	case "claude":
-		p = provider.NewClaude(apiKey)
-	case "gemini":
-		p = provider.NewGemini(apiKey)
-	default:
-		p = provider.NewOpenAI(apiKey)
-	}
+    switch cfg.Provider {
+    case "claude":
+        p = provider.NewClaude(apiKey)
+    case "gemini":
+        p = provider.NewGemini(apiKey)
+    case "custom":
+        p = provider.NewCustom(apiKey)
+    default:
+        p = provider.NewOpenAI(apiKey)
+    }
     systemMsg := "You are a helpful assistant that synthesizes multiple draft commit messages into improved conventional commit suggestions. " +
         "Given several commit messages that may overlap, produce distinct, concise, high-quality alternatives (max 30 tokens each). " +
         "No line breaks; return ONLY the commit messages, one per choice, with no numbering or bullets."

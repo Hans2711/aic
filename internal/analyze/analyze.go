@@ -1,11 +1,10 @@
 package analyze
 
 import (
-	"bytes"
-	"fmt"
-	"os/exec"
-	"regexp"
-	"strings"
+    "bytes"
+    "fmt"
+    "os/exec"
+    "strings"
 
 	"github.com/diesi/aic/internal/commit"
 	"github.com/diesi/aic/internal/openai"
@@ -18,7 +17,7 @@ type Result struct {
 	SampleTotal  int
 }
 
-var ccRe = regexp.MustCompile(`^([a-z]+)(\([^\)]+\))?:\s+(.+)$`)
+// Note: commit subject parsing patterns were removed; future refinements may reintroduce them as needed.
 
 // Analyze collects recent commit subjects and asks the configured AI provider to
 // synthesize clear, prescriptive commit-style instructions for this repository.

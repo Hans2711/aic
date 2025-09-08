@@ -157,9 +157,14 @@ func GenerateSuggestions(cfg Config, apiKey string) ([]string, error) {
 func summarizeDiff(p provider.Provider, providerName, diff string) (string, error) {
 	// Light temperature for determinism
 	temp := float32(0.2)
-	req := openai.ChatCompletionRequest{
-		Model: defaultModelFor(providerName),
-		Messages: []openai.Message{
+    // Choose a safe model for summarization. For custom providers, allow auto-pick.
+    model := defaultModelFor(providerName)
+    if providerName == "custom" {
+        model = "" // let custom provider pick via /v1/models
+    }
+    req := openai.ChatCompletionRequest{
+        Model: model,
+        Messages: []openai.Message{
 			{
 				Role:    "system",
 				Content: "You summarize git diffs. Produce a concise overview: list each file (max 1 line) with nature of change (add/remove/modify/rename) and highlight any: API signature changes, new public functions, deleted functions, dependency/version changes, security related changes, configuration changes. After the list, include a short 'Key Impacts:' section (<=3 bullet lines). No commit messages, no speculation.",
@@ -203,13 +208,15 @@ func firstNRunes(s string, n int) string {
 // composeUserContent builds the final user prompt content with optional summary and truncated diff markers.
 // originalDiff: full diff (possibly large), truncatedDiff: trimmed part actually included, summary: optional summary.
 func composeUserContent(originalDiff, truncatedDiff, summary string) string {
-	if summary == "" {
-		return truncatedDiff
-	}
-	omitted := len(originalDiff) - len(truncatedDiff)
-	if omitted < 0 {
-		omitted = 0
-	}
-	cutoffNote := "[TRUNCATED: showing first " + strconv.Itoa(len(truncatedDiff)) + " of " + strconv.Itoa(len(originalDiff)) + " chars; omitted " + strconv.Itoa(omitted) + "]"
-	return "DIFF SUMMARY (model-generated)\n" + summary + "\n\n" + cutoffNote + "\n--- BEGIN TRUNCATED RAW DIFF ---\n" + truncatedDiff + "\n--- END TRUNCATED RAW DIFF ---\n" + cutoffNote
+    if summary == "" {
+        return truncatedDiff
+    }
+    // Count runes to report accurate character counts for non-ASCII data
+    rlen := func(s string) int { return len([]rune(s)) }
+    omitted := rlen(originalDiff) - rlen(truncatedDiff)
+    if omitted < 0 {
+        omitted = 0
+    }
+    cutoffNote := "[TRUNCATED: showing first " + strconv.Itoa(rlen(truncatedDiff)) + " of " + strconv.Itoa(rlen(originalDiff)) + " chars; omitted " + strconv.Itoa(omitted) + "]"
+    return "DIFF SUMMARY (model-generated)\n" + summary + "\n\n" + cutoffNote + "\n--- BEGIN TRUNCATED RAW DIFF ---\n" + truncatedDiff + "\n--- END TRUNCATED RAW DIFF ---\n" + cutoffNote
 }

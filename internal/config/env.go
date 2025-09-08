@@ -123,35 +123,28 @@ func WarnUnknownAICEnv() {
         EnvCustomBaseURL: {}, EnvCustomChatCompletionsPath: {}, EnvCustomCompletionsPath: {},
         EnvCustomEmbeddingsPath: {}, EnvCustomModelsPath: {}, EnvCustomAPIKey: {},
     }
-	// List of variables that exist in docs historically but are not currently used
-	unused := map[string]string{}
-	printedHeader := false
-	printHdr := func() {
-		if printedHeader {
-			return
-		}
-		fmt.Fprintln(os.Stderr, "[aic] Notes about environment variables:")
-		printedHeader = true
-	}
-	for _, entry := range os.Environ() {
-		// entry is KEY=VALUE
-		if !strings.HasPrefix(entry, "AIC_") {
-			continue
-		}
-		k := entry
-		if i := strings.IndexByte(entry, '='); i >= 0 {
-			k = entry[:i]
-		}
-		if _, ok := known[k]; ok {
-			continue
-		}
-		if msg, ok := unused[k]; ok {
-			printHdr()
-			fmt.Fprintf(os.Stderr, "  - %s is %s\n", k, msg)
-			continue
-		}
-		// Unknown
-		printHdr()
-		fmt.Fprintf(os.Stderr, "  - %s is not recognized; check for typos or remove it.\n", k)
-	}
+    printedHeader := false
+    printHdr := func() {
+        if printedHeader {
+            return
+        }
+        fmt.Fprintln(os.Stderr, "[aic] Notes about environment variables:")
+        printedHeader = true
+    }
+    for _, entry := range os.Environ() {
+        // entry is KEY=VALUE
+        if !strings.HasPrefix(entry, "AIC_") {
+            continue
+        }
+        k := entry
+        if i := strings.IndexByte(entry, '='); i >= 0 {
+            k = entry[:i]
+        }
+        if _, ok := known[k]; ok {
+            continue
+        }
+        // Unknown
+        printHdr()
+        fmt.Fprintf(os.Stderr, "  - %s is not recognized; check for typos or remove it.\n", k)
+    }
 }

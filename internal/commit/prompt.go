@@ -59,10 +59,10 @@ func PromptUserSelect(suggestions []string) (string, error) {
 		return suggestions[selected-1], nil
 	}
 
-	// Interactive TTY mode with single-key selection and arrow navigation
-	// Save current terminal settings and switch to non-canonical, no-echo mode (cbreak)
-	restore, err := enableCBreak()
-	if err != nil {
+    // Interactive TTY mode with single-key selection and arrow navigation
+    // Save current terminal settings and switch to non-canonical, no-echo mode (cbreak)
+    restoreFn, err := enableCBreak()
+    if err != nil {
 		// Fallback to Scanln if terminal tweak fails
 		fmt.Printf("%s%s %sCommit message suggestions:%s\n", cli.ColorGray, cli.ColorBold, cli.IconInfo, cli.ColorReset)
 		for i := 0; i < n; i++ {
@@ -85,7 +85,13 @@ func PromptUserSelect(suggestions []string) (string, error) {
 		}
 		return suggestions[0], nil
 	}
-	defer restore()
+    // Defer a single restoration that always targets the latest active restore function.
+    // This avoids double-restoration glitches when re-entering cbreak after combine.
+    defer func() {
+        if restoreFn != nil {
+            restoreFn()
+        }
+    }()
 
 	selected := 0
 	checked := map[int]bool{}
@@ -98,8 +104,9 @@ func PromptUserSelect(suggestions []string) (string, error) {
 		}
 		return c
 	}
-	render := func() {
-		cols := termCols()
+    // Render only the list and the instruction line (header printed once separately)
+    render := func() {
+        cols := termCols()
 		// Compute visible prefix width precisely: prefix (2) + "[d]" (3) + space (1) + "[ ]" (3) + space (1)
 		// idxLabel is one visible char (1..9 or 0 for 10th)
 		visiblePrefix := 2 + 3 + 1 + 3 + 1 // = 10
@@ -107,9 +114,7 @@ func PromptUserSelect(suggestions []string) (string, error) {
 		if maxMsg < 10 {
 			maxMsg = 10
 		}
-		// Header (single line, no leading blank line)
-		fmt.Printf("%s%s %sCommit message suggestions:%s\n", cli.ColorGray, cli.ColorBold, cli.IconInfo, cli.ColorReset)
-		for i := 0; i < n; i++ {
+        for i := 0; i < n; i++ {
 			idxLabel := fmt.Sprintf("%d", i+1)
 			if n == 10 && i == 9 {
 				idxLabel = "0"
@@ -143,15 +148,19 @@ func PromptUserSelect(suggestions []string) (string, error) {
 			multi = fmt.Sprintf(" – %d selected; Enter combines", countChecked())
 		}
         fmt.Printf("%sUse ↑/↓ or j/k, Space to toggle select, numbers to pick (1-9%s), Enter to confirm%s.%s\n", cli.ColorDim, extra, multi, cli.ColorReset)
-	}
+    }
 
-	// Initial render
-	render()
+    // Print static header once, then initial render
+    printHeader := func() {
+        fmt.Printf("%s%s %sCommit message suggestions:%s\n", cli.ColorGray, cli.ColorBold, cli.IconInfo, cli.ColorReset)
+    }
+    printHeader()
+    render()
 
 	// Read keys and update selection; act immediately on number press
 	in := make([]byte, 3)
-	// total lines for header + list + instruction
-	backLines := n + 2
+    // total lines for list + instruction (header printed once and kept static)
+    backLines := n + 1
 	moveUp := func(lines int) {
 		if lines > 0 {
 			fmt.Printf("\033[%dA", lines)
@@ -174,34 +183,50 @@ func PromptUserSelect(suggestions []string) (string, error) {
 			return "", errors.New("selection canceled")
 		case '\r', '\n':
 			// Enter confirms or combines
-			if countChecked() >= 2 {
-				// Restore terminal to normal before network call/spinner
-				restore()
-				// Collect selected messages in order of appearance
-				combined := make([]string, 0, countChecked())
-				for i := 0; i < n; i++ {
-					if checked[i] {
-						combined = append(combined, suggestions[i])
-					}
-				}
-				// Load cfg from env for combine step
-				cfg, _ := LoadConfig("")
-				var key string
-				if cfg.Provider == "claude" {
-					key = config.Get(config.EnvClaudeAPIKey)
-				} else {
-					key = config.Get(config.EnvOpenAIAPIKey)
-				}
-				stop := cli.Spinner(fmt.Sprintf("Combining %d selected messages via %s", len(combined), cfg.Model))
-				newSugs, err := GenerateCombinedSuggestions(cfg, key, combined)
-				stop(err == nil)
-				if err != nil {
-					return "", err
-				}
-				// Re-enter cbreak mode for interactive selection
-				var reErr error
-				restore, reErr = enableCBreak()
-				if reErr != nil {
+            if countChecked() >= 2 {
+                // Restore terminal to normal before network call/spinner
+                // First clear current panel (header + list + instruction)
+                moveUp(backLines + 1)
+                for i := 0; i < backLines+1; i++ {
+                    clearLine()
+                    if i < backLines {
+                        fmt.Printf("\n")
+                    }
+                }
+                if restoreFn != nil {
+                    restoreFn()
+                    restoreFn = nil
+                }
+                // Collect selected messages in order of appearance
+                combined := make([]string, 0, countChecked())
+                for i := 0; i < n; i++ {
+                    if checked[i] {
+                        combined = append(combined, suggestions[i])
+                    }
+                }
+                // Load cfg from env for combine step
+                cfg, _ := LoadConfig("")
+                var key string
+                switch cfg.Provider {
+                case "claude":
+                    key = config.Get(config.EnvClaudeAPIKey)
+                case "gemini":
+                    key = config.Get(config.EnvGeminiAPIKey)
+                case "custom":
+                    key = config.Get(config.EnvCustomAPIKey) // may be empty
+                default:
+                    key = config.Get(config.EnvOpenAIAPIKey)
+                }
+                stop := cli.Spinner(fmt.Sprintf("Combining %d selected messages via %s", len(combined), cfg.Model))
+                newSugs, err := GenerateCombinedSuggestions(cfg, key, combined)
+                stop(err == nil)
+                if err != nil {
+                    return "", err
+                }
+                // Re-enter cbreak mode for interactive selection
+                var reErr error
+                newRestore, reErr := enableCBreak()
+                if reErr != nil {
 					// Fallback: simple selection prompt
 					// Print combined suggestions and pick first by default
 					fmt.Printf("%s%s %sCombined suggestions:%s\n", cli.ColorGray, cli.ColorBold, cli.IconInfo, cli.ColorReset)
@@ -219,19 +244,20 @@ func PromptUserSelect(suggestions []string) (string, error) {
 						return newSugs[v-1], nil
 					}
 					return newSugs[0], nil
-				}
-				// Ensure terminal will be restored on function exit for the new cbreak session too
-				defer restore()
-				// Replace list and reset state, then re-render
-				suggestions = newSugs
-				n = min(len(suggestions), 10)
-				selected = 0
-				checked = map[int]bool{}
-				// Recompute lines and render
-				backLines = n + 2
-				render()
-				continue
-			}
+                }
+                // Update deferred restore target to the new cbreak session
+                restoreFn = newRestore
+                // Replace list and reset state, then re-render (print new header once)
+                suggestions = newSugs
+                n = min(len(suggestions), 10)
+                selected = 0
+                checked = map[int]bool{}
+                // Recompute lines and render
+                backLines = n + 1
+                printHeader()
+                render()
+                continue
+            }
 			// If exactly one is checked, return it; otherwise return current selection
 			if countChecked() == 1 {
 				for i := 0; i < n; i++ {
