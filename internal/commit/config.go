@@ -10,8 +10,8 @@ import (
 
 const (
 	defaultOpenAIModel = "gpt-4o-mini"
-	defaultClaudeModel = "claude-3-sonnet-20240229"
-	defaultGeminiModel = "gemini-1.5-flash"
+	defaultClaudeModel = "claude-sonnet-4-20250514"
+	defaultGeminiModel = "gemini-2.5-flash"
 	defaultSuggestions = 5
 )
 
