@@ -20,19 +20,19 @@ func GenerateCombinedSuggestions(cfg Config, apiKey string, selected []string) (
 		return nil, errors.New("need at least two messages to combine")
 	}
 	if config.Bool(config.EnvAICMock) {
-		fused := strings.Join(selected, "; ")
-		out := []string{
-			fused,
-			"refactor: combined mock suggestions",
-			"chore: refine combined wording",
-			"feat: consolidate scope across changes",
-			"fix: address edge cases from combined",
-		}
-		if cfg.Suggestions > 0 && cfg.Suggestions < len(out) {
-			out = out[:cfg.Suggestions]
-		}
-		return out, nil
-	}
+        fused := strings.Join(selected, "; ")
+        out := []string{
+            fused,
+            "Refine combined suggestions for clarity",
+            "Improve wording across merged changes",
+            "Consolidate changes into a single subject",
+            "Address edge cases from merged updates",
+        }
+        if cfg.Suggestions > 0 && cfg.Suggestions < len(out) {
+            out = out[:cfg.Suggestions]
+        }
+        return out, nil
+    }
     if apiKey == "" {
         switch cfg.Provider {
         case "claude":
@@ -57,9 +57,9 @@ func GenerateCombinedSuggestions(cfg Config, apiKey string, selected []string) (
     default:
         p = provider.NewOpenAI(apiKey)
     }
-    systemMsg := "You are a helpful assistant that synthesizes multiple draft commit messages into improved conventional commit suggestions. " +
-        "Given several commit messages that may overlap, produce distinct, concise, high-quality alternatives (max 30 tokens each). " +
-        "No line breaks; return ONLY the commit messages, one per choice, with no numbering or bullets."
+    systemMsg := "You synthesize multiple draft commit messages into improved, concise natural-language Git commit subjects. " +
+        "Rules: one line per subject (<=72 chars), imperative mood, no trailing period; no type prefixes or scopes. " +
+        "Return ONLY the subjects, one per choice, with no numbering or bullets."
     if cfg.SystemAddition != "" {
         systemMsg += " Additional user instructions: " + cfg.SystemAddition
     }

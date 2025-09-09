@@ -17,13 +17,13 @@ import (
 
 // GenerateSuggestions creates commit message suggestions based on staged diff.
 func GenerateSuggestions(cfg Config, apiKey string) ([]string, error) {
-	if config.Bool(config.EnvAICMock) {
-		mock := []string{"feat: mock change", "fix: mock issue", "chore: update dependencies"}
-		if cfg.Suggestions > 0 && cfg.Suggestions < len(mock) {
-			mock = mock[:cfg.Suggestions]
-		}
-		return mock, nil
-	}
+    if config.Bool(config.EnvAICMock) {
+        mock := []string{"Update code for mock change", "Fix mock issue in logic", "Update dependencies"}
+        if cfg.Suggestions > 0 && cfg.Suggestions < len(mock) {
+            mock = mock[:cfg.Suggestions]
+        }
+        return mock, nil
+    }
 	if apiKey == "" {
 		switch cfg.Provider {
 		case "claude":
@@ -83,12 +83,12 @@ func GenerateSuggestions(cfg Config, apiKey string) ([]string, error) {
         }
 	}
 
-	userContent := composeUserContent(originalDiff, gitDiff, summary)
-    systemMsg := "You generate single-line Conventional Commit messages. " +
+    userContent := composeUserContent(originalDiff, gitDiff, summary)
+    systemMsg := "You write concise, natural-language Git commit subjects. " +
         "Rules: one line per message (<=72 chars), imperative mood, no trailing period; " +
-        "start with a type (feat|fix|refactor|docs|chore|test|perf|build|ci|style) and optional scope; " +
-        "do NOT mention the diff/user/files or explain. No numbering, bullets, quotes, emojis, or reasoning. " +
-        "Output: return ONLY the messages, one per choice. " +
+        "do NOT use type prefixes or scopes (no 'feat:' or 'feat(scope):'). " +
+        "Do not mention files, authors, diffs, or explain rationale. No numbering, bullets, quotes, emojis, or reasoning. " +
+        "Output: return ONLY the subjects, one per choice. " +
         "Produce exactly " + strconv.Itoa(cfg.Suggestions) + " distinct options prioritizing the most impactful changes."
 	if cfg.SystemAddition != "" {
 		systemMsg += " Additional user instructions: " + cfg.SystemAddition

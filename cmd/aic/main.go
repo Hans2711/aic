@@ -176,7 +176,7 @@ func buildHelp() string {
 	b.WriteString(fmt.Sprintf("%sUsage%s:\n", cli.ColorBold, cli.ColorReset))
 	b.WriteString("  aic [-s \"extra instruction\"] [--version] [--no-color]\n\n")
 	b.WriteString(fmt.Sprintf("%sDescription%s:\n", cli.ColorBold, cli.ColorReset))
-    b.WriteString("  Generates conventional Git commit messages based on your staged changes.\n")
+    b.WriteString("  Generates concise, natural-language Git commit messages based on your staged changes.\n")
     b.WriteString("  It requests suggestions from an AI model, lets you choose one, then offers to commit.\n")
     b.WriteString("  Also includes 'aic analyze' to infer repo style and write .aic.json presets.\n\n")
 	b.WriteString(fmt.Sprintf("%sArguments & Environment%s:\n", cli.ColorBold, cli.ColorReset))

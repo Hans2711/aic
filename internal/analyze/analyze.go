@@ -62,10 +62,10 @@ func collectSubjects(limit int) ([]string, error) {
 // generateInstructions prompts the AI model to output a single, concise
 // instruction string for commit style based on the given subjects.
 func generateInstructions(cfg commit.Config, apiKey string, subjects []string) (string, error) {
-	if len(subjects) == 0 {
-		// With no commits, fall back to a generic instruction set
-		return "Use Conventional Commits (feat|fix|docs|refactor|chore|test|perf|build|ci|style). Imperative mood, subject <=72 chars, scope optional, no trailing period.", nil
-	}
+    if len(subjects) == 0 {
+        // With no commits, fall back to a generic instruction set favoring natural language subjects
+        return "Write concise, natural-language commit subjects in imperative mood (<=72 chars, no trailing period).", nil
+    }
 
 	var p provider.Provider
 	switch cfg.Provider {
