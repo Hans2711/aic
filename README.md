@@ -20,6 +20,9 @@ aic
 # optional: guide the model
 aic -s "Focus on auth refactor and migrations"
 
+# hybrid example: stronger first, faster on combine
+AIC_MODEL=gpt-4o AIC_COMBINE_MODEL=gpt-4o-mini aic
+
 # CI mode (no prompts) and auto‑commit
 AIC_NON_INTERACTIVE=1 AIC_AUTO_COMMIT=1 aic
 
@@ -31,11 +34,12 @@ git commit -m aic
 
 - Recursive combine: multi‑select suggestions, press Enter to synthesize better options, repeat to refine.
 - Multiple providers: `openai`, `claude`, `gemini` (auto‑detect; priority openai > claude > gemini), or `custom`.
-- Sensible defaults: OpenAI `gpt-4o-mini`, Claude `claude-3-sonnet-20240229`, Gemini `gemini-1.5-flash` (override with `AIC_MODEL`).
+- Sensible defaults: OpenAI `gpt-4o` (combine uses `gpt-4o-mini` by default), Claude `claude-sonnet-4-20250514`, Gemini `gemini-2.5-flash` (override with `AIC_MODEL`).
 - Friendly TUI: 1–9/0 to choose, arrows or j/k to navigate, Space to multi‑select.
 - CI‑ready: non‑interactive mode and optional auto‑commit.
 - Large diffs: structured summary plus clearly truncated raw diff with cutoff notes.
 - Mock mode: `AIC_MOCK=1` for deterministic, offline suggestions.
+- Hybrid model mode: use a fast model for initial suggestions and a stronger one during combine via `AIC_COMBINE_PROVIDER`/`AIC_COMBINE_MODEL`.
 - AI‑powered analyze: learns your repo’s style from `git log` and writes a repo `.aic.json` `instructions` used for future commits (merged with home `~/.aic.json` and `-s`).
 
 <details>
@@ -227,7 +231,9 @@ Notes:
  - `AIC_PROVIDER`: `openai` | `claude` | `gemini` | `custom` (auto‑detect from API keys; priority openai > claude > gemini).
  - `OPENAI_API_KEY` / `CLAUDE_API_KEY` / `GEMINI_API_KEY`: required for chosen provider.
  - `CUSTOM_API_KEY`: optional; only if your custom server requires it.
- - `AIC_MODEL`: override default model (OpenAI: `gpt-4o-mini`; Claude: `claude-3-sonnet-20240229`; Gemini: `gemini-1.5-flash`; Custom: set to a model exposed by your server).
+ - `AIC_MODEL`: override default model (OpenAI: `gpt-4o`; Claude: `claude-sonnet-4-20250514`; Gemini: `gemini-2.5-flash`; Custom: set to a model exposed by your server).
+ - `AIC_COMBINE_PROVIDER` / `AIC_COMBINE_MODEL`: provider/model used for the combine step (defaults to the primary provider; for OpenAI, combine defaults to `gpt-4o-mini`).
+ - `AIC_COMBINE_SUGGESTIONS`: number of combined suggestions (defaults to `AIC_SUGGESTIONS`).
 
 Generation & UX:
 

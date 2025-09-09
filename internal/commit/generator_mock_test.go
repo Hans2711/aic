@@ -18,7 +18,8 @@ func TestGenerateSuggestionsMockModeDefaultTrim(t *testing.T) {
 func TestPromptAndOfferNonInteractive(t *testing.T) {
 	t.Setenv("AIC_NON_INTERACTIVE", "1")
 	// PromptUserSelect should pick the first when non-interactive
-	msg, err := PromptUserSelect([]string{"first", "second"})
+	cfg, _ := LoadConfig("")
+	msg, err := PromptUserSelect(cfg, []string{"first", "second"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

@@ -58,8 +58,8 @@ func GenerateCombinedSuggestions(cfg Config, apiKey string, selected []string) (
         p = provider.NewOpenAI(apiKey)
     }
     systemMsg := "You synthesize multiple draft commit messages into improved, concise natural-language Git commit subjects. " +
-        "Rules: one line per subject (<=72 chars), imperative mood, no trailing period; no type prefixes or scopes. " +
-        "Return ONLY the subjects, one per choice, with no numbering or bullets."
+        "Rules: output a single-line subject per choice, imperative mood, no trailing period; no type prefixes or scopes. " +
+        "Prefer clarity even if longer than 72 characters. Return ONLY the subjects, with no numbering or bullets."
     if cfg.SystemAddition != "" {
         systemMsg += " Additional user instructions: " + cfg.SystemAddition
     }
@@ -69,14 +69,15 @@ func GenerateCombinedSuggestions(cfg Config, apiKey string, selected []string) (
     }
 	userContent := "Combine and refine these commit messages into consolidated alternatives:\n\n" + strings.Join(selected, "\n")
 
-	temp := float32(0.4)
-	resp, err := p.Chat(openai.ChatCompletionRequest{
-		Model:       cfg.Model,
-		Messages:    []openai.Message{{Role: "system", Content: systemMsg}, {Role: "user", Content: userContent}},
-		MaxTokens:   256,
-		N:           cfg.Suggestions,
-		Temperature: &temp,
-	})
+    temp := float32(0.4)
+    resp, err := p.Chat(openai.ChatCompletionRequest{
+        Model:       cfg.Model,
+        Messages:    []openai.Message{{Role: "system", Content: systemMsg}, {Role: "user", Content: userContent}},
+        // Allow longer combined subjects when helpful
+        MaxTokens:   512,
+        N:           cfg.Suggestions,
+        Temperature: &temp,
+    })
 	if err != nil {
 		return nil, err
 	}

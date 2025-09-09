@@ -30,34 +30,34 @@ func main() {
 	// Soft warning for unknown/unused AIC_* variables to catch typos/misconfig
 	config.WarnUnknownAICEnv()
 
-    // Simple, robust flag parsing (skips consumed values)
-    for i := 0; i < len(args); i++ {
-        arg := args[i]
-        switch {
-        case arg == "-h" || arg == "--help" || arg == "help":
-            fmt.Print(buildHelp())
-            return
-        case arg == "--version" || arg == "-v":
-            fmt.Printf("aic %s\n", version.Get())
-            return
-        case arg == "--no-color":
-            cli.DisableColors()
-        case strings.HasPrefix(arg, "--hook="):
-            hookFile = strings.TrimPrefix(arg, "--hook=")
-        case arg == "--hook":
-            if i+1 < len(args) {
-                hookFile = args[i+1]
-                i++
-            }
-        case strings.HasPrefix(arg, "-s="):
-            systemAddition = strings.TrimPrefix(arg, "-s=")
-        case arg == "-s":
-            if i+1 < len(args) {
-                systemAddition = args[i+1]
-                i++
-            }
-        }
-    }
+	// Simple, robust flag parsing (skips consumed values)
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case arg == "-h" || arg == "--help" || arg == "help":
+			fmt.Print(buildHelp())
+			return
+		case arg == "--version" || arg == "-v":
+			fmt.Printf("aic %s\n", version.Get())
+			return
+		case arg == "--no-color":
+			cli.DisableColors()
+		case strings.HasPrefix(arg, "--hook="):
+			hookFile = strings.TrimPrefix(arg, "--hook=")
+		case arg == "--hook":
+			if i+1 < len(args) {
+				hookFile = args[i+1]
+				i++
+			}
+		case strings.HasPrefix(arg, "-s="):
+			systemAddition = strings.TrimPrefix(arg, "-s=")
+		case arg == "-s":
+			if i+1 < len(args) {
+				systemAddition = args[i+1]
+				i++
+			}
+		}
+	}
 
 	cfg, err := commit.LoadConfig(systemAddition)
 	if err != nil {
@@ -99,7 +99,7 @@ func main() {
 		}
 		fatal(err)
 	}
-	msg, err := commit.PromptUserSelect(suggestions)
+	msg, err := commit.PromptUserSelect(cfg, suggestions)
 	if err != nil {
 		fatal(err)
 	}
@@ -116,42 +116,42 @@ func main() {
 }
 
 func runAnalyze(args []string) {
-    // Defaults
-    limit := 1000
-    // Allow simple flag: --limit N
-    for i := 0; i < len(args); i++ {
-        if args[i] == "--limit" && i+1 < len(args) {
-            if n, err := strconv.Atoi(args[i+1]); err == nil && n > 0 {
-                limit = n
-            }
-            i++
-        }
-    }
-    // Build a config without extra instructions to avoid biasing analysis
-    cfg, err := commit.LoadConfig("")
-    if err != nil {
-        fatal(err)
-    }
-    var apiKey string
-    switch cfg.Provider {
-    case "claude":
-        apiKey = config.Get(config.EnvClaudeAPIKey)
-    case "gemini":
-        apiKey = config.Get(config.EnvGeminiAPIKey)
-    case "custom":
-        apiKey = config.Get(config.EnvCustomAPIKey)
-    default:
-        apiKey = config.Get(config.EnvOpenAIAPIKey)
-    }
-    res, err := analyze.Analyze(limit, cfg, apiKey)
-    if err != nil {
-        fatal(err)
-    }
-    if err := config.SaveRepoInstructions(res.Instructions); err != nil {
-        fatal(err)
-    }
-    fmt.Printf("%s%s Wrote repo .aic.json%s\n", cli.ColorGray, cli.ColorBold, cli.ColorReset)
-    fmt.Printf("  %sAnalyzed %d commit subjects and generated style instructions.%s\n", cli.ColorDim, res.SampleTotal, cli.ColorReset)
+	// Defaults
+	limit := 1000
+	// Allow simple flag: --limit N
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--limit" && i+1 < len(args) {
+			if n, err := strconv.Atoi(args[i+1]); err == nil && n > 0 {
+				limit = n
+			}
+			i++
+		}
+	}
+	// Build a config without extra instructions to avoid biasing analysis
+	cfg, err := commit.LoadConfig("")
+	if err != nil {
+		fatal(err)
+	}
+	var apiKey string
+	switch cfg.Provider {
+	case "claude":
+		apiKey = config.Get(config.EnvClaudeAPIKey)
+	case "gemini":
+		apiKey = config.Get(config.EnvGeminiAPIKey)
+	case "custom":
+		apiKey = config.Get(config.EnvCustomAPIKey)
+	default:
+		apiKey = config.Get(config.EnvOpenAIAPIKey)
+	}
+	res, err := analyze.Analyze(limit, cfg, apiKey)
+	if err != nil {
+		fatal(err)
+	}
+	if err := config.SaveRepoInstructions(res.Instructions); err != nil {
+		fatal(err)
+	}
+	fmt.Printf("%s%s Wrote repo .aic.json%s\n", cli.ColorGray, cli.ColorBold, cli.ColorReset)
+	fmt.Printf("  %sAnalyzed %d commit subjects and generated style instructions.%s\n", cli.ColorDim, res.SampleTotal, cli.ColorReset)
 }
 
 func buildHelp() string {
@@ -176,9 +176,9 @@ func buildHelp() string {
 	b.WriteString(fmt.Sprintf("%sUsage%s:\n", cli.ColorBold, cli.ColorReset))
 	b.WriteString("  aic [-s \"extra instruction\"] [--version] [--no-color]\n\n")
 	b.WriteString(fmt.Sprintf("%sDescription%s:\n", cli.ColorBold, cli.ColorReset))
-    b.WriteString("  Generates concise, natural-language Git commit messages based on your staged changes.\n")
-    b.WriteString("  It requests suggestions from an AI model, lets you choose one, then offers to commit.\n")
-    b.WriteString("  Also includes 'aic analyze' to infer repo style and write .aic.json presets.\n\n")
+	b.WriteString("  Generates concise, natural-language Git commit messages based on your staged changes.\n")
+	b.WriteString("  It requests suggestions from an AI model, lets you choose one, then offers to commit.\n")
+	b.WriteString("  Also includes 'aic analyze' to infer repo style and write .aic.json presets.\n\n")
 	b.WriteString(fmt.Sprintf("%sArguments & Environment%s:\n", cli.ColorBold, cli.ColorReset))
 	for _, r := range rows {
 		pad := strings.Repeat(" ", maxVar-len(r[0]))

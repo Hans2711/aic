@@ -13,16 +13,18 @@ const (
 	EnvClaudeAPIKey = "CLAUDE_API_KEY"
 	EnvGeminiAPIKey = "GEMINI_API_KEY"
 	// Optional API key for custom provider (may be empty)
-	EnvCustomAPIKey      = "CUSTOM_API_KEY"
-	EnvAICModel          = "AIC_MODEL"
-	EnvAICSuggestions    = "AIC_SUGGESTIONS"
-	EnvAICMock           = "AIC_MOCK"
-    EnvAICDebug          = "AIC_DEBUG"
-	EnvAICNonInteractive = "AIC_NON_INTERACTIVE"
-	EnvAICAutoCommit     = "AIC_AUTO_COMMIT"
-    EnvAICNoColor        = "AIC_NO_COLOR"
-    // Testing/advanced: disable reading repo-local .aic.json
-    EnvAICDisableRepoConfig = "AIC_DISABLE_REPO_CONFIG"
+	EnvCustomAPIKey          = "CUSTOM_API_KEY"
+	EnvAICModel              = "AIC_MODEL"
+	EnvAICSuggestions        = "AIC_SUGGESTIONS"
+	EnvAICCombineModel       = "AIC_COMBINE_MODEL"
+	EnvAICCombineSuggestions = "AIC_COMBINE_SUGGESTIONS"
+	EnvAICMock               = "AIC_MOCK"
+	EnvAICDebug              = "AIC_DEBUG"
+	EnvAICNonInteractive     = "AIC_NON_INTERACTIVE"
+	EnvAICAutoCommit         = "AIC_AUTO_COMMIT"
+	EnvAICNoColor            = "AIC_NO_COLOR"
+	// Testing/advanced: disable reading repo-local .aic.json
+	EnvAICDisableRepoConfig = "AIC_DISABLE_REPO_CONFIG"
 
 	// Common terminal environment variables (non AIC-specific)
 	EnvNoColor = "NO_COLOR"
@@ -30,7 +32,8 @@ const (
 	EnvColumns = "COLUMNS"
 
 	// Provider selection
-	EnvAICProvider = "AIC_PROVIDER"
+	EnvAICProvider        = "AIC_PROVIDER"
+	EnvAICCombineProvider = "AIC_COMBINE_PROVIDER"
 
 	// Custom provider endpoint configuration
 	EnvCustomBaseURL             = "CUSTOM_BASE_URL"              // default: http://127.0.0.1:1234
@@ -44,7 +47,7 @@ const (
 // for display in CLI help output. Keep descriptions concise and include
 // "required" where applicable so callers can highlight them.
 func HelpEnvRowsCore() [][2]string {
-    return [][2]string{
+	return [][2]string{
 		{EnvOpenAIAPIKey, "(required for provider=openai) OpenAI API key"},
 		{EnvClaudeAPIKey, "(required for provider=claude) Claude API key"},
 		{EnvGeminiAPIKey, "(required for provider=gemini) Gemini API key"},
@@ -52,12 +55,15 @@ func HelpEnvRowsCore() [][2]string {
 		{EnvAICModel, "(optional) Model [default depends on provider]"},
 		{EnvAICSuggestions, "(optional) Suggestions count 1-10 [default: 5; non-interactive: 1]"},
 		{EnvAICProvider, "(optional) Provider [openai|claude|gemini|custom] (default: auto-detect from keys; priority openai>claude>gemini)"},
+		{EnvAICCombineProvider, "(optional) Provider for combine step [default: AIC_PROVIDER]"},
+		{EnvAICCombineModel, "(optional) Model for combine step"},
+		{EnvAICCombineSuggestions, "(optional) Suggestions count for combine [default: AIC_SUGGESTIONS]"},
 		{EnvAICDebug, "(optional) Set to 1 for raw response debug"},
 		{EnvAICMock, "(optional) Set to 1 for mock suggestions (no API call)"},
 		{EnvAICNonInteractive, "(optional) 1 to auto-select first suggestion & skip commit"},
 		{EnvAICAutoCommit, "(optional) With NON_INTERACTIVE=1, also perform the commit"},
-        {EnvAICNoColor, "(optional) Disable colored output (same as --no-color)"},
-    }
+		{EnvAICNoColor, "(optional) Disable colored output (same as --no-color)"},
+	}
 }
 
 // HelpEnvRowsCustom returns the custom-provider specific environment variables
@@ -115,36 +121,36 @@ func IntInRange(key string, def, min, max int) int {
 // It helps catch typos or stale variables (e.g., AIC_PROVDIER, AIC_PROVIDER).
 // Warnings are printed to stderr.
 func WarnUnknownAICEnv() {
-    known := map[string]struct{}{
-        EnvAICModel: {}, EnvAICSuggestions: {}, EnvAICMock: {}, EnvAICDebug: {},
-        EnvAICNonInteractive: {}, EnvAICAutoCommit: {}, EnvAICNoColor: {},
-        EnvAICProvider: {}, EnvAICDisableRepoConfig: {},
-        // custom provider configuration keys
-        EnvCustomBaseURL: {}, EnvCustomChatCompletionsPath: {}, EnvCustomCompletionsPath: {},
-        EnvCustomEmbeddingsPath: {}, EnvCustomModelsPath: {}, EnvCustomAPIKey: {},
-    }
-    printedHeader := false
-    printHdr := func() {
-        if printedHeader {
-            return
-        }
-        fmt.Fprintln(os.Stderr, "[aic] Notes about environment variables:")
-        printedHeader = true
-    }
-    for _, entry := range os.Environ() {
-        // entry is KEY=VALUE
-        if !strings.HasPrefix(entry, "AIC_") {
-            continue
-        }
-        k := entry
-        if i := strings.IndexByte(entry, '='); i >= 0 {
-            k = entry[:i]
-        }
-        if _, ok := known[k]; ok {
-            continue
-        }
-        // Unknown
-        printHdr()
-        fmt.Fprintf(os.Stderr, "  - %s is not recognized; check for typos or remove it.\n", k)
-    }
+	known := map[string]struct{}{
+		EnvAICModel: {}, EnvAICSuggestions: {}, EnvAICMock: {}, EnvAICDebug: {},
+		EnvAICNonInteractive: {}, EnvAICAutoCommit: {}, EnvAICNoColor: {},
+		EnvAICProvider: {}, EnvAICCombineProvider: {}, EnvAICCombineModel: {}, EnvAICCombineSuggestions: {}, EnvAICDisableRepoConfig: {},
+		// custom provider configuration keys
+		EnvCustomBaseURL: {}, EnvCustomChatCompletionsPath: {}, EnvCustomCompletionsPath: {},
+		EnvCustomEmbeddingsPath: {}, EnvCustomModelsPath: {}, EnvCustomAPIKey: {},
+	}
+	printedHeader := false
+	printHdr := func() {
+		if printedHeader {
+			return
+		}
+		fmt.Fprintln(os.Stderr, "[aic] Notes about environment variables:")
+		printedHeader = true
+	}
+	for _, entry := range os.Environ() {
+		// entry is KEY=VALUE
+		if !strings.HasPrefix(entry, "AIC_") {
+			continue
+		}
+		k := entry
+		if i := strings.IndexByte(entry, '='); i >= 0 {
+			k = entry[:i]
+		}
+		if _, ok := known[k]; ok {
+			continue
+		}
+		// Unknown
+		printHdr()
+		fmt.Fprintf(os.Stderr, "  - %s is not recognized; check for typos or remove it.\n", k)
+	}
 }
