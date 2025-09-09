@@ -28,3 +28,20 @@ type ChatCompletionResponse struct {
 	} `json:"error"`
 	Raw string `json:"-"`
 }
+
+// EmbeddingsRequest represents the OpenAI embeddings request payload.
+type EmbeddingsRequest struct {
+	Model string `json:"model"`
+	Input string `json:"input"`
+}
+
+// EmbeddingsResponse represents the OpenAI embeddings response payload.
+type EmbeddingsResponse struct {
+	Data []struct {
+		Embedding []float64 `json:"embedding"`
+	} `json:"data"`
+	Error struct {
+		Message string `json:"message"`
+	} `json:"error"`
+	Raw string `json:"-"`
+}

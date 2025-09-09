@@ -11,4 +11,5 @@ type CompletionResponse struct {
 // Provider defines the interface for AI providers.
 type Provider interface {
 	Chat(req openai.ChatCompletionRequest) (*CompletionResponse, error)
+	Embed(text string) ([]float64, error)
 }

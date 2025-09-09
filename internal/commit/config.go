@@ -1,11 +1,11 @@
 package commit
 
 import (
-	"fmt"
-	"os"
-	"strings"
+    "fmt"
+    "os"
+    "strings"
 
-	"github.com/diesi/aic/internal/config"
+    "github.com/diesi/aic/internal/config"
 )
 
 const (
@@ -60,14 +60,18 @@ type Config struct {
 
 func LoadConfig(systemAddition string) (Config, error) {
 	// Load optional repo and user instructions and merge with CLI-provided additions.
-	// Merge order (lowest -> highest precedence): repo, home, CLI.
-	// The final string concatenates non-empty parts with spaces.
-	parts := []string{}
-	rc := config.LoadRepoConfig()
-	uc := config.LoadUserConfig()
-	if rc.Instructions != "" {
-		parts = append(parts, rc.Instructions)
-	}
+    // Merge order (lowest -> highest precedence): repo-style-memory, repo, home, CLI.
+    // The final string concatenates non-empty parts with spaces.
+    parts := []string{}
+    rs := config.LoadRepoStyle()
+    rc := config.LoadRepoConfig()
+    uc := config.LoadUserConfig()
+    if rs.Instructions != "" {
+        parts = append(parts, rs.Instructions)
+    }
+    if rc.Instructions != "" {
+        parts = append(parts, rc.Instructions)
+    }
 	if uc.Instructions != "" {
 		parts = append(parts, uc.Instructions)
 	}
@@ -76,14 +80,15 @@ func LoadConfig(systemAddition string) (Config, error) {
 	}
 	systemAddition = strings.TrimSpace(strings.Join(parts, " "))
 
-	if config.Bool(config.EnvAICDebug) {
-		if config.Bool(config.EnvAICDisableRepoConfig) {
-			fmt.Fprintln(os.Stderr, "[aic][debug] repo config disabled via AIC_DISABLE_REPO_CONFIG=1")
-		}
-		fmt.Fprintf(os.Stderr, "[aic][debug] repo .aic.json instructions: %q\n", rc.Instructions)
-		fmt.Fprintf(os.Stderr, "[aic][debug] home ~/.aic.json instructions: %q\n", uc.Instructions)
-		fmt.Fprintf(os.Stderr, "[aic][debug] merged instructions: %q\n", systemAddition)
-	}
+    if config.Bool(config.EnvAICDebug) {
+        if config.Bool(config.EnvAICDisableRepoConfig) {
+            fmt.Fprintln(os.Stderr, "[aic][debug] repo config disabled via AIC_DISABLE_REPO_CONFIG=1")
+        }
+        fmt.Fprintf(os.Stderr, "[aic][debug] repo style memory instructions: %q\n", rs.Instructions)
+        fmt.Fprintf(os.Stderr, "[aic][debug] repo .aic.json instructions: %q\n", rc.Instructions)
+        fmt.Fprintf(os.Stderr, "[aic][debug] home ~/.aic.json instructions: %q\n", uc.Instructions)
+        fmt.Fprintf(os.Stderr, "[aic][debug] merged instructions: %q\n", systemAddition)
+    }
 	providerName := strings.ToLower(config.Get(config.EnvAICProvider))
 	if providerName == "" {
 		// Auto-detect provider from available API keys when AIC_PROVIDER is unset.

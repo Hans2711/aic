@@ -156,3 +156,8 @@ func (g *Gemini) Chat(req openai.ChatCompletionRequest) (*CompletionResponse, er
 	// Unreachable due to returns in loop
 	return nil, fmt.Errorf("unexpected gemini Chat loop exit")
 }
+
+// Embed is not supported for Gemini and returns an error.
+func (g *Gemini) Embed(text string) ([]float64, error) {
+	return nil, fmt.Errorf("embeddings not supported")
+}

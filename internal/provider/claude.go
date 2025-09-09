@@ -118,3 +118,8 @@ func (c *Claude) Chat(req openai.ChatCompletionRequest) (*CompletionResponse, er
 
 	return &CompletionResponse{Choices: choices, Raw: strings.Join(rawParts, "\n")}, nil
 }
+
+// Embed is not supported for Claude and returns an error.
+func (c *Claude) Embed(text string) ([]float64, error) {
+	return nil, fmt.Errorf("embeddings not supported")
+}

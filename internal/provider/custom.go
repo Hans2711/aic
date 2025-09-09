@@ -216,6 +216,57 @@ func (c *Custom) Chat(req openai.ChatCompletionRequest) (*CompletionResponse, er
 	}
 }
 
+// Embed sends text to the custom server's embeddings endpoint and returns the vector.
+func (c *Custom) Embed(text string) ([]float64, error) {
+	body := map[string]any{"input": text}
+	bodyBytes, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("marshal request: %w", err)
+	}
+	endpoint := c.endpoint(c.EmbeddingsPath)
+	httpReq, err := http.NewRequest("POST", endpoint, bytes.NewBuffer(bodyBytes))
+	if err != nil {
+		return nil, fmt.Errorf("new request: %w", err)
+	}
+	if c.APIKey != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+c.APIKey)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	resp, err := c.HTTPClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	respBody, readErr := io.ReadAll(resp.Body)
+	closeErr := resp.Body.Close()
+	if readErr != nil {
+		return nil, fmt.Errorf("read response body: %w", readErr)
+	}
+	if closeErr != nil {
+		return nil, fmt.Errorf("close response body: %w", closeErr)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		return nil, fmt.Errorf("custom embeddings http %d: %s", resp.StatusCode, string(respBody))
+	}
+	var out struct {
+		Data []struct {
+			Embedding []float64 `json:"embedding"`
+		} `json:"data"`
+		Error struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(respBody, &out); err != nil {
+		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+	if out.Error.Message != "" {
+		return nil, fmt.Errorf("custom error: %s", out.Error.Message)
+	}
+	if len(out.Data) == 0 {
+		return nil, fmt.Errorf("empty embedding response")
+	}
+	return out.Data[0].Embedding, nil
+}
+
 var (
 	// Remove balanced <think>...</think>
 	thinkBalancedRe = regexp.MustCompile(`(?is)<think\b[^>]*>.*?</think>`)

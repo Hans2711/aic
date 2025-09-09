@@ -150,6 +150,7 @@ func runAnalyze(args []string) {
 	if err := config.SaveRepoInstructions(res.Instructions); err != nil {
 		fatal(err)
 	}
+	_ = config.SaveRepoStyle(res.Instructions, res.Embedding)
 	fmt.Printf("%s%s Wrote repo .aic.json%s\n", cli.ColorGray, cli.ColorBold, cli.ColorReset)
 	fmt.Printf("  %sAnalyzed %d commit subjects and generated style instructions.%s\n", cli.ColorDim, res.SampleTotal, cli.ColorReset)
 }
