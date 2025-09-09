@@ -81,12 +81,27 @@ else
   echo "No write perms to $PREFIX_SYSTEM; installing to user bin." >&2
   mkdir -p "$USER_BIN"
   abs_bin="$BIN_PATH"
-  if ln -s "$abs_bin" "$USER_BIN/$APP_NAME" 2>/dev/null; then
-    echo "Symlink: $USER_BIN/$APP_NAME -> $abs_bin"
+  dest_path="$USER_BIN/$APP_NAME"
+  # If destination already resolves to the same file, report and exit cleanly
+  if [ -e "$dest_path" ]; then
+    dest_real=$(readlink -f "$dest_path" 2>/dev/null || echo "")
+    src_real=$(readlink -f "$abs_bin" 2>/dev/null || echo "")
+    if [ -n "$dest_real" ] && [ "$dest_real" = "$src_real" ]; then
+      echo "Already installed: $dest_path -> $abs_bin"
+      echo "(Consider adding $USER_BIN to PATH if not present.)"
+      echo "Run: aic --version"
+      exit 0
+    fi
+  fi
+
+  # Prefer a symlink; overwrite existing file/symlink atomically
+  if ln -sfn "$abs_bin" "$dest_path" 2>/dev/null; then
+    echo "Symlink: $dest_path -> $abs_bin"
   else
-    cp "$abs_bin" "$USER_BIN/$APP_NAME"
-    chmod 0755 "$USER_BIN/$APP_NAME"
-    echo "Installed user copy: $USER_BIN/$APP_NAME"
+    # As a fallback, place a plain copy
+    cp -f "$abs_bin" "$dest_path"
+    chmod 0755 "$dest_path"
+    echo "Installed user copy: $dest_path"
   fi
   echo "(Consider adding $USER_BIN to PATH if not present.)"
 fi
