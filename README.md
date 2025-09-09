@@ -45,14 +45,8 @@ git commit -m aic
 <details>
 <summary><strong>Install</strong></summary>
 
-Clone, verify, and install (no build required):
-
 ```bash
-git clone https://github.com/diesi/aic.git
-cd aic
-./scripts/verify.sh
-sudo bash scripts/install.sh   # /usr/local/bin/aic -> dist/<platform>/aic
-aic --version
+wget -qO- https://raw.githubusercontent.com/Hans2711/aic/master/scripts/install.sh | bash
 ```
 
 If `/usr/local/bin` is unavailable, the installer falls back to `~/.local/bin/aic`. Ensure it’s on `PATH`:
