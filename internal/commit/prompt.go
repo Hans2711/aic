@@ -150,11 +150,11 @@ func PromptUserSelect(suggestions []string) (string, error) {
         fmt.Printf("%sUse ↑/↓ or j/k, Space to toggle select, numbers to pick (1-9%s), Enter to confirm%s.%s\n", cli.ColorDim, extra, multi, cli.ColorReset)
     }
 
-    // Print static header once, then initial render
-    printHeader := func() {
-        fmt.Printf("%s%s %sCommit message suggestions:%s\n", cli.ColorGray, cli.ColorBold, cli.IconInfo, cli.ColorReset)
+    // Print static header with a customizable title, then initial render
+    printHeader := func(title string) {
+        fmt.Printf("%s%s %s%s%s\n", cli.ColorGray, cli.ColorBold, cli.IconInfo, title, cli.ColorReset)
     }
-    printHeader()
+    printHeader(" Commit message suggestions:")
     render()
 
 	// Read keys and update selection; act immediately on number press
@@ -185,18 +185,13 @@ func PromptUserSelect(suggestions []string) (string, error) {
 			// Enter confirms or combines
             if countChecked() >= 2 {
                 // Restore terminal to normal before network call/spinner
-                // First clear current panel (header + list + instruction)
-                moveUp(backLines + 1)
-                for i := 0; i < backLines+1; i++ {
-                    clearLine()
-                    if i < backLines {
-                        fmt.Printf("\n")
-                    }
-                }
                 if restoreFn != nil {
                     restoreFn()
                     restoreFn = nil
                 }
+                // Start spinner output on a fresh line to avoid overwriting
+                // the last instruction line of the previous list.
+                fmt.Printf("\n")
                 // Collect selected messages in order of appearance
                 combined := make([]string, 0, countChecked())
                 for i := 0; i < n; i++ {
@@ -254,7 +249,9 @@ func PromptUserSelect(suggestions []string) (string, error) {
                 checked = map[int]bool{}
                 // Recompute lines and render
                 backLines = n + 1
-                printHeader()
+                // Separate visually from previous block and label as combined
+                fmt.Printf("\n")
+                printHeader(" Combined suggestions:")
                 render()
                 continue
             }
@@ -316,7 +313,7 @@ func PromptUserSelect(suggestions []string) (string, error) {
 		moveUp(backLines - 1)
 		render()
 	}
-	return suggestions[selected], nil
+    return suggestions[selected], nil
 }
 
 // enableCBreak switches terminal to non-canonical, no-echo mode using `stty` and returns a restore func.
