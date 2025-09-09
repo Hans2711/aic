@@ -97,3 +97,42 @@ func (c *Client) Chat(req ChatCompletionRequest) (*ChatCompletionResponse, error
 		return &completion, nil
 	}
 }
+
+// Embeddings requests an embedding vector for the given input text.
+func (c *Client) Embeddings(req EmbeddingsRequest) (*EmbeddingsResponse, error) {
+	bodyBytes, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("marshal request: %w", err)
+	}
+	endpoint := c.BaseURL + "/embeddings"
+	httpReq, err := http.NewRequest("POST", endpoint, bytes.NewBuffer(bodyBytes))
+	if err != nil {
+		return nil, fmt.Errorf("new request: %w", err)
+	}
+	httpReq.Header.Set("Authorization", "Bearer "+c.APIKey)
+	httpReq.Header.Set("Content-Type", "application/json")
+	resp, err := c.HTTPClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	respBody, readErr := io.ReadAll(resp.Body)
+	closeErr := resp.Body.Close()
+	if readErr != nil {
+		return nil, fmt.Errorf("read response body: %w", readErr)
+	}
+	if closeErr != nil {
+		return nil, fmt.Errorf("close response body: %w", closeErr)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		return nil, fmt.Errorf("openai embeddings http %d: %s", resp.StatusCode, string(respBody))
+	}
+	var emb EmbeddingsResponse
+	if err := json.Unmarshal(respBody, &emb); err != nil {
+		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+	emb.Raw = string(respBody)
+	if emb.Error.Message != "" {
+		return nil, fmt.Errorf("openai error: %s", emb.Error.Message)
+	}
+	return &emb, nil
+}

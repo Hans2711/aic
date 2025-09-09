@@ -36,7 +36,7 @@ git commit -m aic
 - CI‑ready: non‑interactive mode and optional auto‑commit.
 - Large diffs: structured summary plus clearly truncated raw diff with cutoff notes.
 - Mock mode: `AIC_MOCK=1` for deterministic, offline suggestions.
-- AI‑powered analyze: learns your repo’s style from `git log` and writes a repo `.aic.json` `instructions` used for future commits (merged with home `~/.aic.json` and `-s`).
+- AI‑powered analyze: learns your repo’s style from `git log`, saves it to a global multi‑repo memory, and writes a repo `.aic.json` `instructions` used for future commits (merged with home `~/.aic.json` and `-s`).
 
 <details>
 <summary><strong>Install</strong></summary>
@@ -68,7 +68,7 @@ xattr -d com.apple.quarantine /usr/local/bin/aic 2>/dev/null || true
 <details>
 <summary><strong>Analyze</strong></summary>
 
-Use AI to infer your repository’s commit message conventions and save them as repo‑local presets.
+Use AI to infer your repository’s commit message conventions and save them to a global style memory keyed by repo (and to a repo‑local preset if desired).
 
 Usage:
 
@@ -79,14 +79,14 @@ aic analyze [--limit N]   # default N=1000 recent subjects
 What it does:
 
 - Reads recent non‑merge commit subjects and asks your configured provider to synthesize concise style instructions.
-- Writes/updates `<repo>/.aic.json` with an `instructions` string.
-- These repo instructions are merged with home `~/.aic.json` and CLI `-s` in this order: repo → home → CLI.
+- Writes/updates `<repo>/.aic.json` with an `instructions` string and caches the style in `~/.aic-styles.json` for automatic use across repos.
+- These repo instructions are merged with home `~/.aic.json` and CLI `-s` in this order: repo style memory → repo `.aic.json` → home → CLI.
 
 Notes:
 
 - Requires a provider API key (OpenAI, Claude, Gemini, or Custom) set in the environment.
 - Only commit subjects are sent (no bodies) to minimize prompt size.
-- You can tweak `.aic.json` manually after generation.
+- You can tweak `.aic.json` or `~/.aic-styles.json` manually after generation.
 
 </details>
 

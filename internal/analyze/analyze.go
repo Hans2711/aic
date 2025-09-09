@@ -1,10 +1,10 @@
 package analyze
 
 import (
-    "bytes"
-    "fmt"
-    "os/exec"
-    "strings"
+	"bytes"
+	"fmt"
+	"os/exec"
+	"strings"
 
 	"github.com/diesi/aic/internal/commit"
 	"github.com/diesi/aic/internal/openai"
@@ -15,6 +15,7 @@ import (
 type Result struct {
 	Instructions string
 	SampleTotal  int
+	Embedding    []float64
 }
 
 // Note: commit subject parsing patterns were removed; future refinements may reintroduce them as needed.
@@ -27,11 +28,23 @@ func Analyze(limit int, cfg commit.Config, apiKey string) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	instr, err := generateInstructions(cfg, apiKey, subjects)
+	var p provider.Provider
+	switch cfg.Provider {
+	case "claude":
+		p = provider.NewClaude(apiKey)
+	case "gemini":
+		p = provider.NewGemini(apiKey)
+	case "custom":
+		p = provider.NewCustom(apiKey)
+	default:
+		p = provider.NewOpenAI(apiKey)
+	}
+	instr, err := generateInstructions(p, cfg.Model, subjects)
 	if err != nil {
 		return Result{}, err
 	}
-	return Result{Instructions: instr, SampleTotal: len(subjects)}, nil
+	emb, _ := p.Embed(instr)
+	return Result{Instructions: instr, SampleTotal: len(subjects), Embedding: emb}, nil
 }
 
 // collectSubjects returns recent non-merge commit subjects (one per line, trimmed).
@@ -61,35 +74,23 @@ func collectSubjects(limit int) ([]string, error) {
 
 // generateInstructions prompts the AI model to output a single, concise
 // instruction string for commit style based on the given subjects.
-func generateInstructions(cfg commit.Config, apiKey string, subjects []string) (string, error) {
-    if len(subjects) == 0 {
-        // With no commits, fall back to a generic instruction set favoring natural language subjects
-        return "Write concise, natural-language commit subjects in imperative mood (<=72 chars, no trailing period).", nil
-    }
-
-	var p provider.Provider
-	switch cfg.Provider {
-	case "claude":
-		p = provider.NewClaude(apiKey)
-	case "gemini":
-		p = provider.NewGemini(apiKey)
-	case "custom":
-		p = provider.NewCustom(apiKey)
-	default:
-		p = provider.NewOpenAI(apiKey)
+func generateInstructions(p provider.Provider, model string, subjects []string) (string, error) {
+	if len(subjects) == 0 {
+		// With no commits, fall back to a generic instruction set favoring natural language subjects
+		return "Write concise, natural-language commit subjects in imperative mood (<=72 chars, no trailing period).", nil
 	}
 
-    // Prepare the prompt. Ask for a single, compact instruction set for .aic.json.
-    system := "You analyze Git commit history and produce a concise, prescriptive style guide for future commit messages. " +
-        "Infer conventions actually used (types like feat|fix|docs|refactor|chore|test|perf|build|ci|style; whether scope is used; whether subjects end with a period; imperative mood; <=72 char subject). " +
-        "Also infer the dominant natural language of the subjects (e.g., English, Spanish, German) and include a brief directive to write messages in that language (e.g., 'Write messages in English.'). " +
-        "Output only the final instruction text suitable for a config file; do not include examples, lists, or the analyzed messages."
+	// Prepare the prompt. Ask for a single, compact instruction set for .aic.json.
+	system := "You analyze Git commit history and produce a concise, prescriptive style guide for future commit messages. " +
+		"Infer conventions actually used (types like feat|fix|docs|refactor|chore|test|perf|build|ci|style; whether scope is used; whether subjects end with a period; imperative mood; <=72 char subject). " +
+		"Also infer the dominant natural language of the subjects (e.g., English, Spanish, German) and include a brief directive to write messages in that language (e.g., 'Write messages in English.'). " +
+		"Output only the final instruction text suitable for a config file; do not include examples, lists, or the analyzed messages."
 	// Join subjects in a compact block. We only pass subjects, not bodies.
 	user := "Recent commit subjects (one per line):\n" + strings.Join(subjects, "\n")
 
 	temp := float32(0.3)
 	req := openai.ChatCompletionRequest{
-		Model:       cfg.Model,
+		Model:       model,
 		Messages:    []openai.Message{{Role: "system", Content: system}, {Role: "user", Content: user}},
 		MaxTokens:   280,
 		N:           1,
