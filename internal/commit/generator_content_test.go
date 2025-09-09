@@ -13,12 +13,12 @@ func TestComposeUserContentWithSummary(t *testing.T) {
 	if len(uc) == 0 {
 		t.Fatal("user content empty")
 	}
-	if !containsAll(uc, []string{"DIFF SUMMARY (model-generated)", "--- BEGIN TRUNCATED RAW DIFF ---", "--- END TRUNCATED RAW DIFF ---", "[TRUNCATED: showing first"}) {
-		snippet := uc
-		if len(snippet) > 400 {
-			snippet = snippet[:400]
-		}
-		t.Fatalf("missing expected markers. snippet: %q", snippet)
+    if !containsAll(uc, []string{"DIFF SUMMARY (model-generated)", "--- BEGIN TRUNCATED RAW DIFF ---", "--- END TRUNCATED RAW DIFF ---", "[TRUNCATED:"}) {
+        snippet := uc
+        if len(snippet) > 400 {
+            snippet = snippet[:400]
+        }
+        t.Fatalf("missing expected markers. snippet: %q", snippet)
 	}
 	// Ensure truncated diff content actually present and matches prefix of full diff
 	if ucFind := findSegment(uc, trunc[:200]); ucFind == -1 {

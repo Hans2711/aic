@@ -83,6 +83,14 @@ func GenerateSuggestions(cfg Config, apiKey string) ([]string, error) {
         }
 	}
 
+    // When we summarize, include both head and tail of the raw diff to give
+    // the model broader coverage while staying within a similar total budget.
+    if summary != "" && len([]rune(originalDiff)) > hardLimit {
+        half := hardLimit / 2
+        head := firstNRunes(originalDiff, half)
+        tail := lastNRunes(originalDiff, half)
+        gitDiff = head + "\n--- TAIL OF TRUNCATED RAW DIFF ---\n" + tail
+    }
     userContent := composeUserContent(originalDiff, gitDiff, summary)
     systemMsg := "You write concise, natural-language Git commit subjects. " +
         "Rules: one line per message (<=72 chars), imperative mood, no trailing period; " +
@@ -198,11 +206,21 @@ func min(a, b int) int {
 // firstNRunes returns at most n runes from the input string.
 // It ensures any truncation occurs on rune boundaries so the result is valid UTF-8.
 func firstNRunes(s string, n int) string {
-	r := []rune(s)
-	if len(r) > n {
-		r = r[:n]
-	}
-	return string(r)
+    r := []rune(s)
+    if len(r) > n {
+        r = r[:n]
+    }
+    return string(r)
+}
+
+// lastNRunes returns at most n runes from the end of the input string.
+// It ensures any truncation occurs on rune boundaries so the result is valid UTF-8.
+func lastNRunes(s string, n int) string {
+    r := []rune(s)
+    if len(r) > n {
+        r = r[len(r)-n:]
+    }
+    return string(r)
 }
 
 // composeUserContent builds the final user prompt content with optional summary and truncated diff markers.
@@ -217,6 +235,6 @@ func composeUserContent(originalDiff, truncatedDiff, summary string) string {
     if omitted < 0 {
         omitted = 0
     }
-    cutoffNote := "[TRUNCATED: showing first " + strconv.Itoa(rlen(truncatedDiff)) + " of " + strconv.Itoa(rlen(originalDiff)) + " chars; omitted " + strconv.Itoa(omitted) + "]"
+    cutoffNote := "[TRUNCATED: showing parts totaling " + strconv.Itoa(rlen(truncatedDiff)) + " of " + strconv.Itoa(rlen(originalDiff)) + " chars; omitted " + strconv.Itoa(omitted) + "]"
     return "DIFF SUMMARY (model-generated)\n" + summary + "\n\n" + cutoffNote + "\n--- BEGIN TRUNCATED RAW DIFF ---\n" + truncatedDiff + "\n--- END TRUNCATED RAW DIFF ---\n" + cutoffNote
 }
