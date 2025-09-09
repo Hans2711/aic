@@ -92,8 +92,13 @@ func OfferCommit(msg string) error {
                     if newTag == "" {
                         return nil
                     }
+                    // Build an annotated message of commits since the last tag
+                    tagMsg, err := buildTagMessage(latest)
+                    if err != nil {
+                        fmt.Printf("%sFailed to build tag message:%s %v\n", cli.ColorYellow, cli.ColorReset, err)
+                    }
                     // Create the tag
-                    if err := createTag(newTag); err != nil {
+                    if err := createTag(newTag, tagMsg); err != nil {
                         fmt.Printf("%sFailed to create tag:%s %v\n", cli.ColorYellow, cli.ColorReset, err)
                         return nil
                     }
@@ -217,8 +222,33 @@ func formatTag(vPrefix bool, major, minor, patch int) string {
     return fmt.Sprintf("%d.%d.%d", major, minor, patch)
 }
 
-func createTag(tag string) error {
-    cmd := exec.Command("git", "tag", tag)
+// buildTagMessage returns a bulletpoint list of commit subjects since the given tag.
+func buildTagMessage(fromTag string) (string, error) {
+    out, err := gitOutput("log", fmt.Sprintf("%s..HEAD", fromTag), "--pretty=format:%s")
+    if err != nil {
+        return "", err
+    }
+    lines := strings.Split(strings.TrimSpace(out), "\n")
+    var b strings.Builder
+    b.WriteString(fmt.Sprintf("Changes since %s:\n", fromTag))
+    for _, l := range lines {
+        l = strings.TrimSpace(l)
+        if l == "" {
+            continue
+        }
+        b.WriteString("- " + l + "\n")
+    }
+    return b.String(), nil
+}
+
+func createTag(tag, message string) error {
+    args := []string{"tag"}
+    if strings.TrimSpace(message) != "" {
+        args = append(args, "-a", tag, "-m", message)
+    } else {
+        args = append(args, tag)
+    }
+    cmd := exec.Command("git", args...)
     cmd.Stdout = os.Stdout
     cmd.Stderr = os.Stderr
     return cmd.Run()
