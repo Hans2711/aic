@@ -1,6 +1,6 @@
-8021d748e6ad9c28086ad52987929e774191815ddb2dda1cbfdb3f98e21fb88b  ./ubuntu-arm64/aic
-a1c3e7b6f2162e6cacdd1c2d12b66de882f20bb2fd43ec9394ad53c3084aab75  ./mac/aic
-25c3f48374dff3400dcd80e2c55dc5660c71a7d85f83f47bbe4ffbdbd21e343d  ./ubuntu/aic
-e2a2ff6337a12db72d0ee16adb87a898b271422c728181fbcbe5fa28ee5f7494  ./windows-arm64/aic.exe
-058a60af68052fa10dc3c4b48e9a1a6d1955f4547ce075eb18ea4c35d2021fba  ./mac-intel/aic
-085f7410590daef1ea1429a385985b6ffef348dc77bf5d5f2ff3b588feec8cb1  ./windows/aic.exe
+b58ebef30dc03f8ca62ca3a4d32f5b08fe8c62d55dddba8ee421d99c47f3402e  ./ubuntu-arm64/aic
+0f5953a392cec1d3f39211ad1cd4ae9676a9c0e46910236a98d315da289dd884  ./mac/aic
+0e2ad365ca11f580016999bbfabc630777d9e257c0ec1b1c8eabef6c9e437f4c  ./ubuntu/aic
+8fbb8eb66330a85cff51d1d9282b2e42b92221c05e779d4cfbe591cfcfd643df  ./windows-arm64/aic.exe
+95fff02846ebfb33f6d9018ebb6ccf8d4fd4a42af5d5584252dcacc2a57f39df  ./mac-intel/aic
+7bd3b2194ec0de410ca0ce93fb35e1fcf86462c3e3af68ef874bdcf0711e9534  ./windows/aic.exe
