@@ -98,6 +98,8 @@ func main() {
         if config.Get(config.EnvAICModel) == "" {
             cfg.Model = commit.ModelForTokens(cfg.Provider, tokens)
         }
+        // Show possible secrets warning before starting the spinner
+        commit.WarnIfSecrets(preDiff)
     }
 
     // Spinner is noisy; disable in daemon mode

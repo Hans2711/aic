@@ -57,13 +57,14 @@ func GenerateSuggestions(cfg Config, apiKey string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	if strings.TrimSpace(gitDiff) == "" {
-		if config.DaemonEnabled() {
-			return nil, errors.New("no changes compared to HEAD")
-		}
-		return nil, errors.New("no staged changes")
-	}
-	warnIfSecrets(gitDiff)
+    if strings.TrimSpace(gitDiff) == "" {
+        if config.DaemonEnabled() {
+            return nil, errors.New("no changes compared to HEAD")
+        }
+        return nil, errors.New("no staged changes")
+    }
+    // Secret warning is emitted by the CLI before starting the spinner to avoid
+    // breaking the spinner output. Do not print here to prevent duplicates.
 
     tokens := len([]rune(gitDiff)) / 4
     if config.Get(config.EnvAICModel) == "" {

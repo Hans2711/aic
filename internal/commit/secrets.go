@@ -32,9 +32,12 @@ func detectSecrets(diff string) []string {
 	return matches
 }
 
-func warnIfSecrets(diff string) {
-	secrets := detectSecrets(diff)
-	if len(secrets) > 0 {
-		fmt.Fprintf(os.Stderr, "%s%s WARNING: possible secrets detected (%s)%s\n", cli.ColorRed, cli.ColorBold, strings.Join(secrets, ", "), cli.ColorReset)
-	}
+// WarnIfSecrets prints a warning to stderr if the provided diff appears
+// to contain secrets. It's exported so the CLI can emit the warning before
+// starting any spinners to avoid output glitches.
+func WarnIfSecrets(diff string) {
+    secrets := detectSecrets(diff)
+    if len(secrets) > 0 {
+        fmt.Fprintf(os.Stderr, "%s%s WARNING: possible secrets detected (%s)%s\n", cli.ColorRed, cli.ColorBold, strings.Join(secrets, ", "), cli.ColorReset)
+    }
 }
