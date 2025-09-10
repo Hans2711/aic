@@ -404,6 +404,17 @@ func GenerateBigCommitMessage(cfg Config, apiKey string) (string, error) {
     // Normalize newlines and trim outer whitespace
     out = strings.ReplaceAll(out, "\r\n", "\n")
     out = strings.ReplaceAll(out, "\r", "\n")
+    // Heuristic: if provider returned a single line with semicolon-delimited segments,
+    // convert to newline-separated lines. Expect pattern: <summary>; <file1>: ...; <file2>: ...
+    if !strings.Contains(out, "\n") && strings.Contains(out, ";") && strings.Contains(out, ":") {
+        parts := strings.Split(out, ";")
+        for i := range parts {
+            parts[i] = strings.TrimSpace(parts[i])
+        }
+        if len(parts) > 1 {
+            out = strings.Join(parts, "\n")
+        }
+    }
     // Ensure no leading/trailing blank lines
     lines := []string{}
     for _, ln := range strings.Split(out, "\n") {
