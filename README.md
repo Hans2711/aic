@@ -39,7 +39,7 @@ git commit -m aic
 
 ## Highlights
 
-- Recursive combine: multi‑select suggestions, press Enter to synthesize better options, repeat to refine.
+- Recursive combine: multi‑select suggestions, press Enter to synthesize better options at a higher temperature (0.7) for diverse phrasing, repeat to refine.
 - Multiple providers: `openai`, `claude`, `gemini` (auto‑detect; priority openai > claude > gemini), or `custom`.
 - Sensible defaults: OpenAI `gpt-4o` (combine uses `gpt-4o-mini` by default), Claude `claude-sonnet-4-20250514`, Gemini `gemini-2.5-flash` (override with `AIC_MODEL`).
 - Friendly TUI: 1–9/0 to choose, arrows or j/k to navigate, Space to multi‑select.
