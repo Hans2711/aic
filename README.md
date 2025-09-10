@@ -64,6 +64,23 @@ xattr -d com.apple.quarantine /usr/local/bin/aic 2>/dev/null || true
 </details>
 
 <details>
+<summary><strong>Update</strong></summary>
+
+Update in place (Linux/macOS):
+
+```bash
+aic update
+```
+
+Notes:
+
+- On Windows, `aic update` is not supported. Reinstall from the latest Release or rebuild from source.
+- If a local repo is found (e.g., `~/aic`), this pulls with `--ff-only` and refreshes the symlink via the installer. If not, it fetches the latest installer and runs it.
+- Manual fallback (if preferred): `cd ~/aic && git pull --ff-only && bash scripts/build.sh && aic --version`
+
+</details>
+
+<details>
 <summary><strong>Analyze</strong></summary>
 
 Use AI to infer your repository’s commit message conventions and save them as repo‑local presets.

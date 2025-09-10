@@ -3,6 +3,9 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -24,6 +27,12 @@ func main() {
 	// Subcommand: analyze
 	if len(args) > 0 && (args[0] == "analyze" || args[0] == "analyse") {
 		runAnalyze(args[1:])
+		return
+	}
+
+	// Subcommand: update
+	if len(args) > 0 && (args[0] == "update") {
+		runUpdate()
 		return
 	}
 
@@ -166,6 +175,10 @@ func buildHelp() string {
 		[2]string{"analyze [--limit N]", "Infer repo commit style and write .aic.json"},
 	)
 	rows = append(rows, config.HelpEnvRowsCustom()...)
+	// Commands
+	rows = append(rows,
+		[2]string{"update", "Update aic to the latest version"},
+	)
 	maxVar := 0
 	for _, r := range rows {
 		if len(r[0]) > maxVar {
@@ -193,6 +206,102 @@ func buildHelp() string {
 	b.WriteString(fmt.Sprintf("%sExample%s:\n", cli.ColorBold, cli.ColorReset))
 	b.WriteString("  aic -s \"Refactor auth logic\"\n")
 	return b.String()
+}
+func runUpdate() {
+    if runtime.GOOS == "windows" {
+        fatal(fmt.Errorf("update is not supported on Windows; please reinstall from the latest release or rebuild from source"))
+    }
+    // Try repo at ~/aic first
+    home := os.Getenv("HOME")
+    repoHome := filepath.Join(home, "aic")
+    if dirExists(filepath.Join(repoHome, ".git")) {
+        if err := gitPull(repoHome); err != nil {
+            fmt.Fprintf(os.Stderr, "%sFailed to pull in %s: %v%s\n", cli.ColorRed, repoHome, err, cli.ColorReset)
+        } else {
+            // Re-run installer to refresh links if needed
+            _ = runInstaller(filepath.Join(repoHome, "scripts", "install.sh"))
+            fmt.Printf("%sUpdated from %s and refreshed installation.%s\n", cli.ColorGreen, repoHome, cli.ColorReset)
+            return
+        }
+    }
+
+    // Try to discover repo from executable path by walking up to find .git
+    if repoExec := findGitRootFromExecutable(); repoExec != "" {
+        if err := gitPull(repoExec); err != nil {
+            fmt.Fprintf(os.Stderr, "%sFailed to pull in %s: %v%s\n", cli.ColorRed, repoExec, err, cli.ColorReset)
+        } else {
+            _ = runInstaller(filepath.Join(repoExec, "scripts", "install.sh"))
+            fmt.Printf("%sUpdated from %s and refreshed installation.%s\n", cli.ColorGreen, repoExec, cli.ColorReset)
+            return
+        }
+    }
+
+    // Fallback: remote installer (fresh or repair)
+    fmt.Printf("%sNo local repo found; fetching installer...%s\n", cli.ColorDim, cli.ColorReset)
+    cmd := exec.Command("bash", "-lc", "(curl -fsSL https://raw.githubusercontent.com/Hans2711/aic/master/scripts/install.sh || wget -qO- https://raw.githubusercontent.com/Hans2711/aic/master/scripts/install.sh) | bash")
+    cmd.Stdout = os.Stdout
+    cmd.Stderr = os.Stderr
+    if err := cmd.Run(); err != nil {
+        fatal(fmt.Errorf("update failed: %w", err))
+    }
+}
+
+func gitPull(repo string) error {
+    // Fast-forward only to avoid unintended merges
+    cmd := exec.Command("git", "-C", repo, "pull", "--ff-only", "--rebase=false")
+    cmd.Stdout = os.Stdout
+    cmd.Stderr = os.Stderr
+    return cmd.Run()
+}
+
+func runInstaller(path string) error {
+    if !fileExists(path) {
+        return fmt.Errorf("installer not found: %s", path)
+    }
+    cmd := exec.Command("bash", path)
+    cmd.Stdout = os.Stdout
+    cmd.Stderr = os.Stderr
+    return cmd.Run()
+}
+
+func findGitRootFromExecutable() string {
+    exe, err := os.Executable()
+    if err != nil {
+        return ""
+    }
+    real, err := filepath.EvalSymlinks(exe)
+    if err != nil {
+        real = exe
+    }
+    dir := filepath.Dir(real)
+    // Walk upward until root looking for .git
+    for i := 0; i < 10; i++ { // cap to reasonable depth
+        if dirExists(filepath.Join(dir, ".git")) {
+            return dir
+        }
+        parent := filepath.Dir(dir)
+        if parent == dir {
+            break
+        }
+        dir = parent
+    }
+    return ""
+}
+
+func dirExists(path string) bool {
+    st, err := os.Stat(path)
+    if err != nil {
+        return false
+    }
+    return st.IsDir()
+}
+
+func fileExists(path string) bool {
+    st, err := os.Stat(path)
+    if err != nil {
+        return false
+    }
+    return !st.IsDir()
 }
 func fatal(err error) {
 	// Provide nicer categorized errors
