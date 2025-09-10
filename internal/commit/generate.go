@@ -37,13 +37,14 @@ func GenerateSuggestions(cfg Config, apiKey string) ([]string, error) {
 			return nil, errors.New("missing OPENAI_API_KEY")
 		}
 	}
-	gitDiff, err := git.StagedDiff()
-	if err != nil {
-		return nil, err
-	}
-	if strings.TrimSpace(gitDiff) == "" {
-		return nil, errors.New("no staged changes")
-	}
+       gitDiff, err := git.StagedDiff()
+       if err != nil {
+               return nil, err
+       }
+       if strings.TrimSpace(gitDiff) == "" {
+               return nil, errors.New("no staged changes")
+       }
+       warnIfSecrets(gitDiff)
 
 	var p provider.Provider
 	switch cfg.Provider {
