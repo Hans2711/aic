@@ -49,6 +49,13 @@ git commit -m aic
 - Hybrid model mode: use a fast model for initial suggestions and a stronger one during combine via `AIC_COMBINE_PROVIDER`/`AIC_COMBINE_MODEL`.
 - AI‑powered analyze: learns your repo’s style from `git log` and writes a repo `.aic.json` `instructions` used for future commits (merged with home `~/.aic.json` and `-s`).
 
+## Editor Plugins
+
+Inline commit message suggestions are available directly inside popular IDEs:
+
+- **VS Code**: the extension in `plugins/vscode` adds an “AIC: Suggest Commit Message” action to the Source Control input box.
+  - Developer link (no packaging): `bash scripts/link_vscode_extension.sh` to symlink the local extension to `~/.vscode/extensions/aic`, then reload VS Code.
+
 <details>
 <summary><strong>Install</strong></summary>
 
@@ -121,7 +128,7 @@ File: `~/.aic.json`
 
 ```json
 {
-  "instructions": "Use imperative mood, keep <=72 chars, prefer feat|fix|docs|refactor scopes, no trailing period."
+  "instructions": "Use imperative mood, keep <=92 chars, prefer feat|fix|docs|refactor scopes, no trailing period."
 }
 ```
 

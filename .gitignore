@@ -1,3 +1,4 @@
 .gomodcache
 .gopath
+.gocache
 .aic.json

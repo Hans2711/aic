@@ -59,7 +59,7 @@ func GenerateCombinedSuggestions(cfg Config, apiKey string, selected []string) (
     }
     systemMsg := "You synthesize multiple draft commit messages into improved, concise natural-language Git commit subjects. " +
         "Rules: output a single-line subject per choice, imperative mood, no trailing period; no type prefixes or scopes. " +
-        "Prefer clarity even if longer than 72 characters. Return ONLY the subjects, with no numbering or bullets."
+        "Prefer clarity even if longer than 92 characters. Return ONLY the subjects, with no numbering or bullets."
     if cfg.SystemAddition != "" {
         systemMsg += " Additional user instructions: " + cfg.SystemAddition
     }

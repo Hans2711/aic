@@ -15,17 +15,20 @@ import (
 
 // PromptUserSelect lets the user choose a suggestion.
 func PromptUserSelect(cfg Config, suggestions []string) (string, error) {
-	// Non-interactive auto-select first suggestion if AIC_NON_INTERACTIVE=1
-	if config.Bool(config.EnvAICNonInteractive) {
-		if len(suggestions) == 0 {
-			return "", errors.New("no suggestions to select")
-		}
-		fmt.Printf("%s\n%sCommit message suggestions (non-interactive mode):%s\n", cli.ColorGray, cli.ColorBold, cli.ColorReset)
-		for i, s := range suggestions {
-			fmt.Printf("  %s[%d]%s %s%s%s\n", cli.ColorYellow, i+1, cli.ColorReset, cli.ColorCyan, s, cli.ColorReset)
-		}
-		return suggestions[0], nil
-	}
+    // Non-interactive auto-select first suggestion if AIC_NON_INTERACTIVE=1
+    if config.Bool(config.EnvAICNonInteractive) {
+        if len(suggestions) == 0 {
+            return "", errors.New("no suggestions to select")
+        }
+        // In daemon mode, suppress listing output entirely
+        if !config.Bool(config.EnvAICDaemon) {
+            fmt.Printf("%s\n%sCommit message suggestions (non-interactive mode):%s\n", cli.ColorGray, cli.ColorBold, cli.ColorReset)
+            for i, s := range suggestions {
+                fmt.Printf("  %s[%d]%s %s%s%s\n", cli.ColorYellow, i+1, cli.ColorReset, cli.ColorCyan, s, cli.ColorReset)
+            }
+        }
+        return suggestions[0], nil
+    }
 
 	// Limit display and selection to at most 10 (keys 1-9,0)
 	n := min(len(suggestions), 10)

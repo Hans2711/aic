@@ -37,13 +37,23 @@ func GenerateSuggestions(cfg Config, apiKey string) ([]string, error) {
 			return nil, errors.New("missing OPENAI_API_KEY")
 		}
 	}
-	gitDiff, err := git.StagedDiff()
-	if err != nil {
-		return nil, err
-	}
-	if strings.TrimSpace(gitDiff) == "" {
-		return nil, errors.New("no staged changes")
-	}
+    // Choose diff source: in daemon mode, include all changes (staged + unstaged)
+    var gitDiff string
+    var err error
+    if config.DaemonEnabled() {
+        gitDiff, err = git.WorktreeDiff()
+    } else {
+        gitDiff, err = git.StagedDiff()
+    }
+    if err != nil {
+        return nil, err
+    }
+    if strings.TrimSpace(gitDiff) == "" {
+        if config.DaemonEnabled() {
+            return nil, errors.New("no changes compared to HEAD")
+        }
+        return nil, errors.New("no staged changes")
+    }
 
 	var p provider.Provider
 	switch cfg.Provider {
@@ -93,7 +103,7 @@ func GenerateSuggestions(cfg Config, apiKey string) ([]string, error) {
     }
     userContent := composeUserContent(originalDiff, gitDiff, summary)
     systemMsg := "You write concise, natural-language Git commit subjects. " +
-        "Rules: one line per message (<=72 chars), imperative mood, no trailing period; " +
+        "Rules: one line per message (<=92 chars), imperative mood, no trailing period; " +
         "do NOT use type prefixes or scopes (no 'feat:' or 'feat(scope):'). " +
         "Do not mention files, authors, diffs, or explain rationale. No numbering, bullets, quotes, emojis, or reasoning. " +
         "Output: return ONLY the subjects, one per choice. " +
