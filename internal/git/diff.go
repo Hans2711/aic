@@ -1,11 +1,11 @@
 package git
 
 import (
-	"bytes"
-	"errors"
-	"fmt"
-	"os/exec"
-	"strings"
+    "bytes"
+    "errors"
+    "fmt"
+    "os/exec"
+    "strings"
 )
 
 // StagedDiff returns the staged (cached) git diff using minimal unified output.
@@ -41,6 +41,57 @@ func StagedDiff() (string, error) {
 		return "", lastErr
 	}
 	return "", errors.New("failed to obtain git diff")
+}
+
+// WorktreeDiff returns the diff of all changes compared to HEAD (includes
+// both staged and unstaged changes). Uses minimal unified output like StagedDiff.
+func WorktreeDiff() (string, error) {
+    if err := insideRepo(); err != nil {
+        return "", err
+    }
+    // First, try a single comparison against HEAD which includes both staged
+    // and unstaged changes in one diff.
+    {
+        args := []string{"diff", "--minimal", "--unified=0", "--no-prefix", "--color=never", "HEAD"}
+        cmd := exec.Command("git", args...)
+        var out bytes.Buffer
+        cmd.Stdout = &out
+        cmd.Stderr = &out
+        if err := cmd.Run(); err == nil {
+            return out.String(), nil
+        }
+        // If this fails (e.g., initial commit without HEAD), fall through to combine staged + unstaged.
+    }
+
+    // Combine staged and unstaged diffs for maximum coverage (useful on initial commit).
+    var buf bytes.Buffer
+    // Staged part
+    if s, err := StagedDiff(); err == nil && strings.TrimSpace(s) != "" {
+        buf.WriteString(s)
+        if !strings.HasSuffix(s, "\n") {
+            buf.WriteByte('\n')
+        }
+    }
+    // Unstaged part (working tree vs index)
+    {
+        args := []string{"diff", "--minimal", "--unified=0", "--no-prefix", "--color=never"}
+        cmd := exec.Command("git", args...)
+        var out bytes.Buffer
+        cmd.Stdout = &out
+        cmd.Stderr = &out
+        if err := cmd.Run(); err == nil {
+            if t := out.String(); strings.TrimSpace(t) != "" {
+                buf.WriteString(t)
+                if !strings.HasSuffix(t, "\n") {
+                    buf.WriteByte('\n')
+                }
+            }
+        }
+    }
+    if buf.Len() == 0 {
+        return "", errors.New("failed to obtain git worktree diff")
+    }
+    return buf.String(), nil
 }
 
 func insideRepo() error {

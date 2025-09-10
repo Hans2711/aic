@@ -36,8 +36,10 @@ func main() {
 		return
 	}
 
-	// Soft warning for unknown/unused AIC_* variables to catch typos/misconfig
-	config.WarnUnknownAICEnv()
+    // Soft warning for unknown/unused AIC_* variables to catch typos/misconfig
+    config.WarnUnknownAICEnv()
+    // Daemon mode prints only the final message; suppress extra UI
+    daemon := config.DaemonEnabled()
 
 	// Simple, robust flag parsing (skips consumed values)
 	for i := 0; i < len(args); i++ {
@@ -73,15 +75,21 @@ func main() {
 		fatal(err)
 	}
 
-	// Show which staged files are included in the diff (for transparency)
-	if files, err := git.StagedFiles(); err == nil && len(files) > 0 {
-		fmt.Printf("%s%s Staged changes:%s\n", cli.ColorGray, cli.ColorBold, cli.ColorReset)
-		for _, f := range files {
-			fmt.Printf("  %s- %s%s\n", cli.ColorYellow, f, cli.ColorReset)
-		}
-	}
+    // Show which staged files are included in the diff (for transparency), unless in daemon mode
+    if !daemon {
+        if files, err := git.StagedFiles(); err == nil && len(files) > 0 {
+            fmt.Printf("%s%s Staged changes:%s\n", cli.ColorGray, cli.ColorBold, cli.ColorReset)
+            for _, f := range files {
+                fmt.Printf("  %s- %s%s\n", cli.ColorYellow, f, cli.ColorReset)
+            }
+        }
+    }
 
-	stop := cli.Spinner(fmt.Sprintf("Requesting %d suggestions from %s", cfg.Suggestions, cfg.Model))
+    // Spinner is noisy; disable in daemon mode
+    stop := func(bool) {}
+    if !daemon {
+        stop = cli.Spinner(fmt.Sprintf("Requesting %d suggestions from %s", cfg.Suggestions, cfg.Model))
+    }
 	var apiKey string
 	switch cfg.Provider {
 	case "claude":

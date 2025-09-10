@@ -1,0 +1,31 @@
+{
+  "name": "aic-commit",
+  "displayName": "AIC Commit Suggestions",
+  "description": "Inline commit message suggestions via the aic CLI",
+  "version": "0.0.1",
+  "publisher": "aic",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "activationEvents": [
+    "onCommand:aic.suggestCommitMessage"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "aic.suggestCommitMessage",
+        "title": "AIC: Suggest Commit Message",
+        "icon": "$(sparkle)"
+      }
+    ],
+    "menus": {
+      "scm/inputBox": [
+        {
+          "command": "aic.suggestCommitMessage",
+          "group": "navigation@-100"
+        }
+      ]
+    }
+  }
+}

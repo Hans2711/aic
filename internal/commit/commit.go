@@ -15,6 +15,11 @@ import (
 
 // OfferCommit asks to commit or copy to clipboard.
 func OfferCommit(msg string) error {
+    // Daemon mode: print only the message with no decorations
+    if config.Bool(config.EnvAICDaemon) {
+        fmt.Println(msg)
+        return nil
+    }
     fmt.Printf("\n%sSelected commit message:%s\n  %s%s%s\n", cli.ColorBold, cli.ColorReset, cli.ColorGreen, msg, cli.ColorReset)
     if config.Bool(config.EnvAICNonInteractive) {
         // In CI/test mode, don't attempt to commit unless explicitly allowed
