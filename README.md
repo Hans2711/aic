@@ -83,6 +83,29 @@ xattr -d com.apple.quarantine /usr/local/bin/aic 2>/dev/null || true
 </details>
 
 <details>
+<summary><strong>Usage</strong></summary>
+
+```bash
+aic [-s "extra instruction"] [--version] [--no-color]
+aic --big                  # output a single multi-line commit (summary + per-file)
+aic analyze [--limit N]    # infer repo style and write .aic.json
+```
+
+Interactive controls:
+
+- 1–9/0 choose, ↑/↓ navigate, Space multi‑select, Enter combine.
+
+Disable ANSI colors:
+
+```bash
+aic --no-color
+# or
+export AIC_NO_COLOR=1; aic
+```
+
+</details>
+
+<details>
 <summary><strong>Update</strong></summary>
 
 Update in place (Linux/macOS):
@@ -202,29 +225,6 @@ Notes:
 - The AppImage contains a static Go binary (CGO disabled), so it runs on most modern distros.
 - The AppImage is CLI‑oriented (Terminal=true); it launches `aic` in your terminal.
 - The packager uses APPIMAGE_EXTRACT_AND_RUN=1 to avoid a FUSE requirement.
-
-</details>
-
-<details>
-<summary><strong>Usage</strong></summary>
-
-```bash
-aic [-s "extra instruction"] [--version] [--no-color]
-aic --big                  # output a single multi-line commit (summary + per-file)
-aic analyze [--limit N]    # infer repo style and write .aic.json
-```
-
-Interactive controls:
-
-- 1–9/0 choose, ↑/↓ navigate, Space multi‑select, Enter combine.
-
-Disable ANSI colors:
-
-```bash
-aic --no-color
-# or
-export AIC_NO_COLOR=1; aic
-```
 
 </details>
 
