@@ -24,7 +24,9 @@ const (
 	EnvAICDebug              = "AIC_DEBUG"
 	EnvAICNonInteractive     = "AIC_NON_INTERACTIVE"
 	EnvAICAutoCommit         = "AIC_AUTO_COMMIT"
-	EnvAICNoColor            = "AIC_NO_COLOR"
+    EnvAICNoColor            = "AIC_NO_COLOR"
+    // Big commit mode: produce one summary + per-file lines
+    EnvAICBigCommit         = "AIC_BIG_COMMIT"
 	// Daemon mode: suppress all UI/decoration; print only the selected message
 	EnvAICDaemon = "AIC_DAEMON"
 	// Common misspelling used by some integrations; treat as alias
@@ -53,7 +55,7 @@ const (
 // for display in CLI help output. Keep descriptions concise and include
 // "required" where applicable so callers can highlight them.
 func HelpEnvRowsCore() [][2]string {
-	return [][2]string{
+    return [][2]string{
 		{EnvOpenAIAPIKey, "(required for provider=openai) OpenAI API key"},
 		{EnvClaudeAPIKey, "(required for provider=claude) Claude API key"},
 		{EnvGeminiAPIKey, "(required for provider=gemini) Gemini API key"},
@@ -69,10 +71,11 @@ func HelpEnvRowsCore() [][2]string {
 		{EnvAICDebug, "(optional) Set to 1 for raw response debug"},
 		{EnvAICMock, "(optional) Set to 1 for mock suggestions (no API call)"},
 		{EnvAICNonInteractive, "(optional) 1 to auto-select first suggestion & skip commit"},
-		{EnvAICAutoCommit, "(optional) With NON_INTERACTIVE=1, also perform the commit"},
-		{EnvAICNoColor, "(optional) Disable colored output (same as --no-color)"},
-		{EnvAICDaemon, "(optional) Print only the selected message (no extra output)"},
-	}
+        {EnvAICAutoCommit, "(optional) With NON_INTERACTIVE=1, also perform the commit"},
+        {EnvAICNoColor, "(optional) Disable colored output (same as --no-color)"},
+        {EnvAICBigCommit, "(optional) 1 to output a single multi-line commit (summary + per-file)"},
+        {EnvAICDaemon, "(optional) Print only the selected message (no extra output)"},
+    }
 }
 
 // HelpEnvRowsCustom returns the custom-provider specific environment variables
@@ -130,14 +133,14 @@ func IntInRange(key string, def, min, max int) int {
 // It helps catch typos or stale variables (e.g., AIC_PROVDIER, AIC_PROVIDER).
 // Warnings are printed to stderr.
 func WarnUnknownAICEnv() {
-	known := map[string]struct{}{
-		EnvAICModel: {}, EnvAICModelSmall: {}, EnvAICModelLarge: {}, EnvAICSuggestions: {}, EnvAICMock: {}, EnvAICDebug: {},
-		EnvAICNonInteractive: {}, EnvAICAutoCommit: {}, EnvAICNoColor: {}, EnvAICDaemon: {}, EnvAICDeamonAlias: {},
-		EnvAICProvider: {}, EnvAICCombineProvider: {}, EnvAICCombineModel: {}, EnvAICCombineSuggestions: {}, EnvAICDisableRepoConfig: {},
-		// custom provider configuration keys
-		EnvCustomBaseURL: {}, EnvCustomChatCompletionsPath: {}, EnvCustomCompletionsPath: {},
-		EnvCustomEmbeddingsPath: {}, EnvCustomModelsPath: {}, EnvCustomAPIKey: {},
-	}
+    known := map[string]struct{}{
+        EnvAICModel: {}, EnvAICModelSmall: {}, EnvAICModelLarge: {}, EnvAICSuggestions: {}, EnvAICMock: {}, EnvAICDebug: {},
+        EnvAICNonInteractive: {}, EnvAICAutoCommit: {}, EnvAICNoColor: {}, EnvAICDaemon: {}, EnvAICDeamonAlias: {}, EnvAICBigCommit: {},
+        EnvAICProvider: {}, EnvAICCombineProvider: {}, EnvAICCombineModel: {}, EnvAICCombineSuggestions: {}, EnvAICDisableRepoConfig: {},
+        // custom provider configuration keys
+        EnvCustomBaseURL: {}, EnvCustomChatCompletionsPath: {}, EnvCustomCompletionsPath: {},
+        EnvCustomEmbeddingsPath: {}, EnvCustomModelsPath: {}, EnvCustomAPIKey: {},
+    }
 	printedHeader := false
 	printHdr := func() {
 		if printedHeader {

@@ -21,7 +21,8 @@ import (
 func main() {
 	// Environment variables are used directly; no .env file loading.
 	var systemAddition string
-	var hookFile string
+    var hookFile string
+    var bigMode bool
 	args := os.Args[1:]
 
 	// Subcommand: analyze
@@ -60,8 +61,10 @@ func main() {
 				hookFile = args[i+1]
 				i++
 			}
-		case strings.HasPrefix(arg, "-s="):
-			systemAddition = strings.TrimPrefix(arg, "-s=")
+        case arg == "--big":
+            bigMode = true
+        case strings.HasPrefix(arg, "-s="):
+            systemAddition = strings.TrimPrefix(arg, "-s=")
 		case arg == "-s":
 			if i+1 < len(args) {
 				systemAddition = args[i+1]
@@ -70,10 +73,13 @@ func main() {
 		}
 	}
 
-	cfg, err := commit.LoadConfig(systemAddition)
-	if err != nil {
-		fatal(err)
-	}
+    cfg, err := commit.LoadConfig(systemAddition)
+    if err != nil {
+        fatal(err)
+    }
+    if bigMode {
+        cfg.BigCommit = true
+    }
 
     // Show which staged files are included in the diff (for transparency), unless in daemon mode
     if !daemon {
@@ -86,9 +92,15 @@ func main() {
     }
 
     // Pre-compute diff tokens to pick model before starting spinner
-    // Matches GenerateSuggestions source (daemon -> worktree, else staged)
+    // For big mode: prefer staged when staged files exist
     var preDiff string
-    if daemon {
+    if cfg.BigCommit {
+        if files, _ := git.StagedFiles(); len(files) > 0 {
+            preDiff, _ = git.StagedDiff()
+        } else {
+            preDiff, _ = git.WorktreeDiff()
+        }
+    } else if daemon {
         preDiff, _ = git.WorktreeDiff()
     } else {
         preDiff, _ = git.StagedDiff()
@@ -105,7 +117,11 @@ func main() {
     // Spinner is noisy; disable in daemon mode
     stop := func(bool) {}
     if !daemon {
-        stop = cli.Spinner(fmt.Sprintf("Requesting %d suggestions from %s", cfg.Suggestions, cfg.Model))
+        if cfg.BigCommit {
+            stop = cli.Spinner(fmt.Sprintf("Requesting big commit message from %s", cfg.Model))
+        } else {
+            stop = cli.Spinner(fmt.Sprintf("Requesting %d suggestions from %s", cfg.Suggestions, cfg.Model))
+        }
     }
 	var apiKey string
 	switch cfg.Provider {
@@ -118,13 +134,44 @@ func main() {
 	default:
 		apiKey = config.Get(config.EnvOpenAIAPIKey)
 	}
-	suggestions, err := commit.GenerateSuggestions(cfg, apiKey)
-	stop(err == nil)
-	if err != nil {
-		if isInvalidKeyErr(err) {
-			switch cfg.Provider {
-			case "claude":
-				fmt.Fprintln(os.Stderr, "Hint: Ensure your real CLAUDE_API_KEY is exported (export CLAUDE_API_KEY=sk-...)")
+    if cfg.BigCommit {
+        msg, err := commit.GenerateBigCommitMessage(cfg, apiKey)
+        stop(err == nil)
+        if err != nil {
+            if isInvalidKeyErr(err) {
+                switch cfg.Provider {
+                case "claude":
+                    fmt.Fprintln(os.Stderr, "Hint: Ensure your real CLAUDE_API_KEY is exported (export CLAUDE_API_KEY=sk-...)")
+                case "gemini":
+                    fmt.Fprintln(os.Stderr, "Hint: Ensure your real GEMINI_API_KEY is exported (export GEMINI_API_KEY=sk-...)")
+                case "custom":
+                    // no hint
+                default:
+                    fmt.Fprintln(os.Stderr, "Hint: Ensure your real OPENAI_API_KEY is exported (export OPENAI_API_KEY=sk-...)")
+                }
+            }
+            fatal(err)
+        }
+        // Hook output mode
+        if hookFile != "" {
+            if err := os.WriteFile(hookFile, []byte(msg+"\n"), 0644); err != nil {
+                fatal(fmt.Errorf("failed to write hook message file: %w", err))
+            }
+            return
+        }
+        if err := commit.OfferCommit(msg); err != nil {
+            fatal(err)
+        }
+        return
+    }
+
+    suggestions, err := commit.GenerateSuggestions(cfg, apiKey)
+    stop(err == nil)
+    if err != nil {
+        if isInvalidKeyErr(err) {
+            switch cfg.Provider {
+            case "claude":
+                fmt.Fprintln(os.Stderr, "Hint: Ensure your real CLAUDE_API_KEY is exported (export CLAUDE_API_KEY=sk-...)")
 			case "gemini":
 				fmt.Fprintln(os.Stderr, "Hint: Ensure your real GEMINI_API_KEY is exported (export GEMINI_API_KEY=sk-...)")
 			default:
@@ -193,12 +240,13 @@ func buildHelp() string {
 	// Core env rows come from config, then CLI flags, then custom-provider env rows.
 	rows := make([][2]string, 0, 32)
 	rows = append(rows, config.HelpEnvRowsCore()...)
-	rows = append(rows,
-		[2]string{"--version / -v", "Show version and exit"},
-		[2]string{"--no-color", "Disable colored output (alias: AIC_NO_COLOR=1)"},
-		[2]string{"--hook <file>", "Hook mode: write selected message to file and exit"},
-		[2]string{"analyze [--limit N]", "Infer repo commit style and write .aic.json"},
-	)
+    rows = append(rows,
+        [2]string{"--version / -v", "Show version and exit"},
+        [2]string{"--no-color", "Disable colored output (alias: AIC_NO_COLOR=1)"},
+        [2]string{"--big", "Generate a single multi-line commit (summary + per-file)"},
+        [2]string{"--hook <file>", "Hook mode: write selected message to file and exit"},
+        [2]string{"analyze [--limit N]", "Infer repo commit style and write .aic.json"},
+    )
 	rows = append(rows, config.HelpEnvRowsCustom()...)
 	// Commands
 	rows = append(rows,

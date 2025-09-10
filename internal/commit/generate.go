@@ -268,3 +268,153 @@ func composeUserContent(originalDiff, truncatedDiff, summary string) string {
 	cutoffNote := "[TRUNCATED: showing parts totaling " + strconv.Itoa(rlen(truncatedDiff)) + " of " + strconv.Itoa(rlen(originalDiff)) + " chars; omitted " + strconv.Itoa(omitted) + "]"
 	return "DIFF SUMMARY (model-generated)\n" + summary + "\n\n" + cutoffNote + "\n--- BEGIN TRUNCATED RAW DIFF ---\n" + truncatedDiff + "\n--- END TRUNCATED RAW DIFF ---\n" + cutoffNote
 }
+
+// GenerateBigCommitMessage creates a single multi-line commit message consisting of
+// one overall summary line followed by one short line per changed file in the
+// format "path/to/file: short message". It skips interactive selection and is
+// intended for direct use with OfferCommit.
+//
+// Behavior:
+// - Uses staged diff when staged files exist, otherwise falls back to worktree diff.
+// - Chooses model based on token budget unless AIC_MODEL is explicitly set.
+// - Handles very large diffs by summarizing and truncating similar to suggestions.
+// - Returns commit text with lines separated by \n only (no blank lines around).
+func GenerateBigCommitMessage(cfg Config, apiKey string) (string, error) {
+    if config.Bool(config.EnvAICMock) {
+        // Deterministic mock output for tests
+        return "Overall summary of mock changes\nfoo/bar.txt: Update mock logic\nbaz/qux.go: Fix mock bug", nil
+    }
+    if apiKey == "" {
+        switch cfg.Provider {
+        case "claude":
+            return "", errors.New("missing CLAUDE_API_KEY")
+        case "gemini":
+            return "", errors.New("missing GEMINI_API_KEY")
+        case "custom":
+            // May be empty
+        default:
+            return "", errors.New("missing OPENAI_API_KEY")
+        }
+    }
+
+    // Prefer staged diff if any files are staged
+    files, _ := git.StagedFiles()
+    var gitDiff string
+    var err error
+    if len(files) > 0 {
+        gitDiff, err = git.StagedDiff()
+    } else {
+        gitDiff, err = git.WorktreeDiff()
+    }
+    if err != nil {
+        return "", err
+    }
+    if strings.TrimSpace(gitDiff) == "" {
+        if len(files) > 0 {
+            return "", errors.New("no staged changes")
+        }
+        return "", errors.New("no changes compared to HEAD")
+    }
+
+    // Token-based model choice unless user forced a model
+    tokens := len([]rune(gitDiff)) / 4
+    if config.Get(config.EnvAICModel) == "" {
+        cfg.Model = ModelForTokens(cfg.Provider, tokens)
+    }
+
+    // Provider selection
+    var p provider.Provider
+    switch cfg.Provider {
+    case "claude":
+        p = provider.NewClaude(apiKey)
+    case "gemini":
+        p = provider.NewGemini(apiKey)
+    case "custom":
+        p = provider.NewCustom(apiKey)
+    default:
+        p = provider.NewOpenAI(apiKey)
+    }
+
+    // Handle very large diffs similarly to suggestions
+    originalDiff := gitDiff
+    const hardLimit = 20000
+    var summary string
+    if len(originalDiff) > hardLimit {
+        if s, sumErr := summarizeDiff(p, cfg.Provider, originalDiff); sumErr == nil && strings.TrimSpace(s) != "" {
+            summary = s
+        }
+        if len(gitDiff) > hardLimit {
+            if !utf8.ValidString(gitDiff[:hardLimit]) {
+                cut := hardLimit
+                for cut > 0 && (gitDiff[cut]&0xC0) == 0x80 {
+                    cut--
+                }
+                gitDiff = gitDiff[:cut]
+            } else {
+                gitDiff = gitDiff[:hardLimit]
+            }
+        }
+        if summary != "" && config.Bool(config.EnvAICDebug) {
+            fmt.Fprintf(os.Stderr, "%s\n[debug] diff summarized for big commit (orig=%d, shown=%d)\n%s\n", cli.ColorDim, len(originalDiff), len(gitDiff), cli.ColorReset)
+        }
+    }
+    if summary != "" && len([]rune(originalDiff)) > hardLimit {
+        half := hardLimit / 2
+        head := firstNRunes(originalDiff, half)
+        tail := lastNRunes(originalDiff, half)
+        gitDiff = head + "\n--- TAIL OF TRUNCATED RAW DIFF ---\n" + tail
+    }
+
+    // Build prompts
+    ctx := git.RepoContext()
+    userContent := composeUserContent(originalDiff, gitDiff, summary)
+    if ctx != "" {
+        userContent = ctx + "\n\n" + userContent
+    }
+    // Explicit instruction for required output format
+    systemMsg := "You write a single Git commit message composed of: " +
+        "(1) one overall summary line at the top; (2) one short line per changed file in the format 'path/to/file: short message'. " +
+        "Rules: lines separated only by \n; no blank lines; keep each line concise (<=92 chars); imperative mood; no trailing period on the top summary line; " +
+        "do NOT include types/scopes (no 'feat:'), authors, diffs, or rationale; no markdown, bullets, or quotes. " +
+        "Output EXACTLY the commit text."
+    if cfg.SystemAddition != "" {
+        systemMsg += " Additional user instructions: " + cfg.SystemAddition
+    }
+    if config.Bool(config.EnvAICDebug) {
+        fmt.Fprintln(os.Stderr, "[aic][debug] system prompt for big commit:")
+        fmt.Fprintln(os.Stderr, systemMsg)
+    }
+
+    temp := float32(0.2)
+    // Allow larger token budget for per-file lines
+    resp, err := p.Chat(openai.ChatCompletionRequest{
+        Model:       cfg.Model,
+        Messages:    []openai.Message{{Role: "system", Content: systemMsg}, {Role: "user", Content: userContent}},
+        MaxTokens:   1024,
+        N:           1,
+        Temperature: &temp,
+    })
+    if err != nil {
+        return "", err
+    }
+    if resp == nil || len(resp.Choices) == 0 {
+        return "", errors.New("no choices returned")
+    }
+    out := strings.TrimSpace(resp.Choices[0])
+    // Normalize newlines and trim outer whitespace
+    out = strings.ReplaceAll(out, "\r\n", "\n")
+    out = strings.ReplaceAll(out, "\r", "\n")
+    // Ensure no leading/trailing blank lines
+    lines := []string{}
+    for _, ln := range strings.Split(out, "\n") {
+        ln = strings.TrimSpace(ln)
+        if ln == "" {
+            continue
+        }
+        lines = append(lines, ln)
+    }
+    if len(lines) == 0 {
+        return "", errors.New("empty response")
+    }
+    return strings.Join(lines, "\n"), nil
+}

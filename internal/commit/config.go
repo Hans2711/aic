@@ -64,10 +64,12 @@ func defaultCombineModelFor(providerName string) string {
 
 // Config holds runtime parameters loaded from env.
 type Config struct {
-	Provider       string
-	Model          string
-	Suggestions    int
-	SystemAddition string
+    Provider       string
+    Model          string
+    Suggestions    int
+    SystemAddition string
+    // BigCommit enables a single multi-line commit message output
+    BigCommit      bool
 }
 
 func LoadConfig(systemAddition string) (Config, error) {
@@ -120,7 +122,7 @@ func LoadConfig(systemAddition string) (Config, error) {
 			providerName = "openai"
 		}
 	}
-	cfg := Config{Provider: providerName, Model: defaultModelFor(providerName), Suggestions: defaultSuggestions, SystemAddition: systemAddition}
+    cfg := Config{Provider: providerName, Model: defaultModelFor(providerName), Suggestions: defaultSuggestions, SystemAddition: systemAddition}
 	// In non-interactive mode, favor requesting a single suggestion by default
 	// to avoid unnecessary tokens/work. Users can still override via AIC_SUGGESTIONS.
 	if config.Bool(config.EnvAICNonInteractive) {
@@ -137,9 +139,13 @@ func LoadConfig(systemAddition string) (Config, error) {
 	if cfg.Provider == "openai" && cfg.Model == "gpt-5" {
 		cfg.Model = "gpt-5-2025-08-07"
 	}
-	// sanity limit (max 10 for quick selection)
-	cfg.Suggestions = config.IntInRange(config.EnvAICSuggestions, cfg.Suggestions, 1, 10)
-	return cfg, nil
+    // sanity limit (max 10 for quick selection)
+    cfg.Suggestions = config.IntInRange(config.EnvAICSuggestions, cfg.Suggestions, 1, 10)
+    // Big commit mode via env
+    if config.Bool(config.EnvAICBigCommit) {
+        cfg.BigCommit = true
+    }
+    return cfg, nil
 }
 
 // LoadCombineConfig loads configuration for the combine step. It starts with the

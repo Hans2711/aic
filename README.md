@@ -210,7 +210,8 @@ Notes:
 
 ```bash
 aic [-s "extra instruction"] [--version] [--no-color]
-aic analyze [--limit N]   # infer repo style and write .aic.json
+aic --big                  # output a single multi-line commit (summary + per-file)
+aic analyze [--limit N]    # infer repo style and write .aic.json
 ```
 
 Interactive controls:
@@ -223,6 +224,39 @@ Disable ANSI colors:
 aic --no-color
 # or
 export AIC_NO_COLOR=1; aic
+```
+
+</details>
+
+<details>
+<summary><strong>Big Commit Mode</strong></summary>
+
+Produce a single commit message that contains:
+
+- Top line: one overall summary.
+- Following lines: one per changed file in the format `path/to/file: short message`.
+
+Usage:
+
+```bash
+aic --big
+# or
+export AIC_BIG_COMMIT=1; aic
+```
+
+Notes:
+
+- Prefers staged changes; if none are staged, includes all worktree changes vs HEAD.
+- Skips interactive selection and sends the full message directly to the commit confirm step.
+- Respects `-s "..."` additional instructions and repo/home `.aic.json` prompts.
+
+Example output:
+
+```
+Refactor auth and tighten validation
+cmd/server/main.go: wire new auth middleware
+internal/auth/service.go: fix token expiry check and errors
+web/handlers/login.tsx: update form field names
 ```
 
 </details>
@@ -270,6 +304,7 @@ Generation & UX:
 
 - `AIC_SUGGESTIONS`: number of suggestions (1–10, default 5; non-interactive default: 1).
 - `AIC_NO_COLOR`: disable colors (same as `--no-color`).
+- `AIC_BIG_COMMIT=1`: output a single multi-line commit (overall summary + per-file lines).
 - `-s "..."`: extra instruction appended to the prompt.
 
 Run modes:
