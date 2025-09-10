@@ -45,6 +45,7 @@ git commit -m aic
 - Friendly TUI: 1–9/0 to choose, arrows or j/k to navigate, Space to multi‑select.
 - CI‑ready: non‑interactive mode and optional auto‑commit.
 - Large diffs: structured summary plus clearly truncated raw diff with cutoff notes.
+- Context-aware: pulls branch names, PR titles, and linked issue descriptions to guide suggestions.
 - Mock mode: `AIC_MOCK=1` for deterministic, offline suggestions.
 - Hybrid model mode: use a fast model for initial suggestions and a stronger one during combine via `AIC_COMBINE_PROVIDER`/`AIC_COMBINE_MODEL`.
 - AI‑powered analyze: learns your repo’s style from `git log` and writes a repo `.aic.json` `instructions` used for future commits (merged with home `~/.aic.json` and `-s`).
