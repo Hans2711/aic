@@ -7,9 +7,16 @@ AI‑assisted git commit message generator with an iterative “combine” workf
 
 ## Quick Start
 
+Set your API key via environment variables. `export` works in Bash shells; PowerShell and CMD equivalents are shown below.
+
 ```bash
 # choose a provider (auto‑detected if set)
+# Bash (Linux/macOS):
 export OPENAI_API_KEY=sk-...   # or: export CLAUDE_API_KEY=sk-... or: export GEMINI_API_KEY=sk-...
+# PowerShell (current session):
+$Env:OPENAI_API_KEY="sk-..."   # or: $Env:CLAUDE_API_KEY="sk-..." or: $Env:GEMINI_API_KEY="sk-..."
+# PowerShell or CMD (persist for new sessions):
+setx OPENAI_API_KEY "sk-..."   # or: setx CLAUDE_API_KEY "sk-..." or: setx GEMINI_API_KEY "sk-..."
 
 # optional: infer this repo's commit style and save .aic.json (used as presets)
 aic analyze
