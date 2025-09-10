@@ -15,6 +15,15 @@ import (
 	"github.com/diesi/aic/internal/provider"
 )
 
+// ModelForTokens selects a small or large model based on token count.
+// Exposed so the CLI can determine and display the chosen model before starting the spinner.
+func ModelForTokens(providerName string, tokens int) string {
+    if tokens < 2000 {
+        return smallModelFor(providerName)
+    }
+    return largeModelFor(providerName)
+}
+
 // GenerateSuggestions creates commit message suggestions based on staged diff.
 func GenerateSuggestions(cfg Config, apiKey string) ([]string, error) {
 	if config.Bool(config.EnvAICMock) {
@@ -37,24 +46,29 @@ func GenerateSuggestions(cfg Config, apiKey string) ([]string, error) {
 			return nil, errors.New("missing OPENAI_API_KEY")
 		}
 	}
-    // Choose diff source: in daemon mode, include all changes (staged + unstaged)
-    var gitDiff string
-    var err error
-    if config.DaemonEnabled() {
-        gitDiff, err = git.WorktreeDiff()
-    } else {
-        gitDiff, err = git.StagedDiff()
+	// Choose diff source: in daemon mode, include all changes (staged + unstaged)
+	var gitDiff string
+	var err error
+	if config.DaemonEnabled() {
+		gitDiff, err = git.WorktreeDiff()
+	} else {
+		gitDiff, err = git.StagedDiff()
+	}
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(gitDiff) == "" {
+		if config.DaemonEnabled() {
+			return nil, errors.New("no changes compared to HEAD")
+		}
+		return nil, errors.New("no staged changes")
+	}
+	warnIfSecrets(gitDiff)
+
+    tokens := len([]rune(gitDiff)) / 4
+    if config.Get(config.EnvAICModel) == "" {
+        cfg.Model = ModelForTokens(cfg.Provider, tokens)
     }
-    if err != nil {
-        return nil, err
-    }
-    if strings.TrimSpace(gitDiff) == "" {
-        if config.DaemonEnabled() {
-            return nil, errors.New("no changes compared to HEAD")
-        }
-        return nil, errors.New("no staged changes")
-    }
-    warnIfSecrets(gitDiff)
 
 	var p provider.Provider
 	switch cfg.Provider {
@@ -94,25 +108,25 @@ func GenerateSuggestions(cfg Config, apiKey string) ([]string, error) {
 		}
 	}
 
-    // When we summarize, include both head and tail of the raw diff to give
-    // the model broader coverage while staying within a similar total budget.
-    if summary != "" && len([]rune(originalDiff)) > hardLimit {
-        half := hardLimit / 2
-        head := firstNRunes(originalDiff, half)
-        tail := lastNRunes(originalDiff, half)
-        gitDiff = head + "\n--- TAIL OF TRUNCATED RAW DIFF ---\n" + tail
-    }
-    ctx := git.RepoContext()
-    userContent := composeUserContent(originalDiff, gitDiff, summary)
-    if ctx != "" {
-        userContent = ctx + "\n\n" + userContent
-    }
-    systemMsg := "You write concise, natural-language Git commit subjects. " +
-        "Rules: one line per message (<=92 chars), imperative mood, no trailing period; " +
-        "do NOT use type prefixes or scopes (no 'feat:' or 'feat(scope):'). " +
-        "Do not mention files, authors, diffs, or explain rationale. No numbering, bullets, quotes, emojis, or reasoning. " +
-        "Output: return ONLY the subjects, one per choice. " +
-        "Produce exactly " + strconv.Itoa(cfg.Suggestions) + " distinct options prioritizing the most impactful changes."
+	// When we summarize, include both head and tail of the raw diff to give
+	// the model broader coverage while staying within a similar total budget.
+	if summary != "" && len([]rune(originalDiff)) > hardLimit {
+		half := hardLimit / 2
+		head := firstNRunes(originalDiff, half)
+		tail := lastNRunes(originalDiff, half)
+		gitDiff = head + "\n--- TAIL OF TRUNCATED RAW DIFF ---\n" + tail
+	}
+	ctx := git.RepoContext()
+	userContent := composeUserContent(originalDiff, gitDiff, summary)
+	if ctx != "" {
+		userContent = ctx + "\n\n" + userContent
+	}
+	systemMsg := "You write concise, natural-language Git commit subjects. " +
+		"Rules: one line per message (<=92 chars), imperative mood, no trailing period; " +
+		"do NOT use type prefixes or scopes (no 'feat:' or 'feat(scope):'). " +
+		"Do not mention files, authors, diffs, or explain rationale. No numbering, bullets, quotes, emojis, or reasoning. " +
+		"Output: return ONLY the subjects, one per choice. " +
+		"Produce exactly " + strconv.Itoa(cfg.Suggestions) + " distinct options prioritizing the most impactful changes."
 	if cfg.SystemAddition != "" {
 		systemMsg += " Additional user instructions: " + cfg.SystemAddition
 	}

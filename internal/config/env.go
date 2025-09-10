@@ -15,6 +15,8 @@ const (
 	// Optional API key for custom provider (may be empty)
 	EnvCustomAPIKey          = "CUSTOM_API_KEY"
 	EnvAICModel              = "AIC_MODEL"
+	EnvAICModelSmall         = "AIC_MODEL_SMALL"
+	EnvAICModelLarge         = "AIC_MODEL_LARGE"
 	EnvAICSuggestions        = "AIC_SUGGESTIONS"
 	EnvAICCombineModel       = "AIC_COMBINE_MODEL"
 	EnvAICCombineSuggestions = "AIC_COMBINE_SUGGESTIONS"
@@ -23,10 +25,10 @@ const (
 	EnvAICNonInteractive     = "AIC_NON_INTERACTIVE"
 	EnvAICAutoCommit         = "AIC_AUTO_COMMIT"
 	EnvAICNoColor            = "AIC_NO_COLOR"
-    // Daemon mode: suppress all UI/decoration; print only the selected message
-    EnvAICDaemon             = "AIC_DAEMON"
-    // Common misspelling used by some integrations; treat as alias
-    EnvAICDeamonAlias        = "AIC_DEAMON"
+	// Daemon mode: suppress all UI/decoration; print only the selected message
+	EnvAICDaemon = "AIC_DAEMON"
+	// Common misspelling used by some integrations; treat as alias
+	EnvAICDeamonAlias = "AIC_DEAMON"
 	// Testing/advanced: disable reading repo-local .aic.json
 	EnvAICDisableRepoConfig = "AIC_DISABLE_REPO_CONFIG"
 
@@ -51,12 +53,14 @@ const (
 // for display in CLI help output. Keep descriptions concise and include
 // "required" where applicable so callers can highlight them.
 func HelpEnvRowsCore() [][2]string {
-    return [][2]string{
+	return [][2]string{
 		{EnvOpenAIAPIKey, "(required for provider=openai) OpenAI API key"},
 		{EnvClaudeAPIKey, "(required for provider=claude) Claude API key"},
 		{EnvGeminiAPIKey, "(required for provider=gemini) Gemini API key"},
 		{EnvCustomAPIKey, "(optional for provider=custom) API key if your server requires it"},
-		{EnvAICModel, "(optional) Model [default depends on provider]"},
+		{EnvAICModel, "(optional) Model [overrides all small/large defaults]"},
+		{EnvAICModelSmall, "(optional) Small model override"},
+		{EnvAICModelLarge, "(optional) Large model override"},
 		{EnvAICSuggestions, "(optional) Suggestions count 1-10 [default: 5; non-interactive: 1]"},
 		{EnvAICProvider, "(optional) Provider [openai|claude|gemini|custom] (default: auto-detect from keys; priority openai>claude>gemini)"},
 		{EnvAICCombineProvider, "(optional) Provider for combine step [default: AIC_PROVIDER]"},
@@ -67,8 +71,8 @@ func HelpEnvRowsCore() [][2]string {
 		{EnvAICNonInteractive, "(optional) 1 to auto-select first suggestion & skip commit"},
 		{EnvAICAutoCommit, "(optional) With NON_INTERACTIVE=1, also perform the commit"},
 		{EnvAICNoColor, "(optional) Disable colored output (same as --no-color)"},
-        {EnvAICDaemon, "(optional) Print only the selected message (no extra output)"},
-    }
+		{EnvAICDaemon, "(optional) Print only the selected message (no extra output)"},
+	}
 }
 
 // HelpEnvRowsCustom returns the custom-provider specific environment variables
@@ -126,14 +130,14 @@ func IntInRange(key string, def, min, max int) int {
 // It helps catch typos or stale variables (e.g., AIC_PROVDIER, AIC_PROVIDER).
 // Warnings are printed to stderr.
 func WarnUnknownAICEnv() {
-    known := map[string]struct{}{
-        EnvAICModel: {}, EnvAICSuggestions: {}, EnvAICMock: {}, EnvAICDebug: {},
-        EnvAICNonInteractive: {}, EnvAICAutoCommit: {}, EnvAICNoColor: {}, EnvAICDaemon: {}, EnvAICDeamonAlias: {},
-        EnvAICProvider: {}, EnvAICCombineProvider: {}, EnvAICCombineModel: {}, EnvAICCombineSuggestions: {}, EnvAICDisableRepoConfig: {},
-        // custom provider configuration keys
-        EnvCustomBaseURL: {}, EnvCustomChatCompletionsPath: {}, EnvCustomCompletionsPath: {},
-        EnvCustomEmbeddingsPath: {}, EnvCustomModelsPath: {}, EnvCustomAPIKey: {},
-    }
+	known := map[string]struct{}{
+		EnvAICModel: {}, EnvAICModelSmall: {}, EnvAICModelLarge: {}, EnvAICSuggestions: {}, EnvAICMock: {}, EnvAICDebug: {},
+		EnvAICNonInteractive: {}, EnvAICAutoCommit: {}, EnvAICNoColor: {}, EnvAICDaemon: {}, EnvAICDeamonAlias: {},
+		EnvAICProvider: {}, EnvAICCombineProvider: {}, EnvAICCombineModel: {}, EnvAICCombineSuggestions: {}, EnvAICDisableRepoConfig: {},
+		// custom provider configuration keys
+		EnvCustomBaseURL: {}, EnvCustomChatCompletionsPath: {}, EnvCustomCompletionsPath: {},
+		EnvCustomEmbeddingsPath: {}, EnvCustomModelsPath: {}, EnvCustomAPIKey: {},
+	}
 	printedHeader := false
 	printHdr := func() {
 		if printedHeader {
@@ -163,5 +167,5 @@ func WarnUnknownAICEnv() {
 // DaemonEnabled returns true if daemon mode is enabled via either the canonical
 // AIC_DAEMON variable or the commonly misspelled AIC_DEAMON alias.
 func DaemonEnabled() bool {
-    return Bool(EnvAICDaemon) || Bool(EnvAICDeamonAlias)
+	return Bool(EnvAICDaemon) || Bool(EnvAICDeamonAlias)
 }

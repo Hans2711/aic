@@ -85,6 +85,21 @@ func main() {
         }
     }
 
+    // Pre-compute diff tokens to pick model before starting spinner
+    // Matches GenerateSuggestions source (daemon -> worktree, else staged)
+    var preDiff string
+    if daemon {
+        preDiff, _ = git.WorktreeDiff()
+    } else {
+        preDiff, _ = git.StagedDiff()
+    }
+    if strings.TrimSpace(preDiff) != "" {
+        tokens := len([]rune(preDiff)) / 4
+        if config.Get(config.EnvAICModel) == "" {
+            cfg.Model = commit.ModelForTokens(cfg.Provider, tokens)
+        }
+    }
+
     // Spinner is noisy; disable in daemon mode
     stop := func(bool) {}
     if !daemon {
