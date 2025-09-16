@@ -13,9 +13,11 @@ WORK_DIR="$DIST_DIR/appimage"
 mkdir -p "$TOOLS_DIR" "$WORK_DIR"
 
 # Resolve version (optional; used for metadata only)
+RELEASE_ENV="$REPO_ROOT/release.env"
 VERSION="${VERSION:-}"
-if [ -z "${VERSION}" ] && [ -f "$REPO_ROOT/internal/version/version.go" ]; then
-  VERSION=$(awk -F '"' '/const Version/ {print $2}' "$REPO_ROOT/internal/version/version.go" || true)
+if [ -z "${VERSION}" ] && [ -f "$RELEASE_ENV" ]; then
+  # shellcheck disable=SC1090
+  source "$RELEASE_ENV"
 fi
 
 ensure_appimagetool() {
@@ -106,4 +108,3 @@ build_one amd64 x86_64 "$BIN_AMD64" || ret=1
 build_one arm64 aarch64 "$BIN_ARM64" || ret=1
 
 exit $ret
-

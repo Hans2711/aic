@@ -1,9 +1,27 @@
 class Aic < Formula
+  release_env_path = File.expand_path("../release.env", __dir__)
+  raise "release.env not found at #{release_env_path}" unless File.exist?(release_env_path)
+
+  release_metadata = {}
+  File.foreach(release_env_path) do |line|
+    line = line.strip
+    next if line.empty? || line.start_with?("#")
+
+    key, value = line.split("=", 2)
+    next if value.nil?
+
+    release_metadata[key] = value.strip
+  end
+
+  release_version = release_metadata.fetch("VERSION")
+  source_url = "https://github.com/Hans2711/aic/archive/refs/tags/v#{release_version}.tar.gz"
+  sha_value = release_metadata["SOURCE_SHA256"]
+
   desc "AI-assisted git commit message generator"
   homepage "https://github.com/Hans2711/aic"
-  url "https://github.com/Hans2711/aic/archive/dad708eb1004cf24954193adca38cbc00f26aee0.tar.gz"
-  version "1.0.0"
-  sha256 "70577b15d7c764de9905895da1583c0750ace9aff6bbb2e9adca1319dcc39c5d"
+  url source_url
+  version release_version
+  sha256 sha_value.nil? || sha_value.empty? ? :no_check : sha_value
   head "https://github.com/Hans2711/aic.git", branch: "master"
 
   depends_on "go" => :build

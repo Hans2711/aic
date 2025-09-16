@@ -13,15 +13,15 @@ mkdir -p "$DEB_OUT_DIR"
 # Remove any previously generated .deb files to avoid uploading stale ones
 rm -f "$DEB_OUT_DIR"/*.deb 2>/dev/null || true
 
-# Resolve version: prefer $VERSION env, otherwise read from internal/version/version.go
+# Resolve version: prefer $VERSION env, otherwise source release.env
+RELEASE_ENV="$REPO_ROOT/release.env"
 VERSION="${VERSION:-}"
-if [ -z "${VERSION}" ]; then
-  if [ -f "$REPO_ROOT/internal/version/version.go" ]; then
-    VERSION=$(awk -F '"' '/const Version/ {print $2}' "$REPO_ROOT/internal/version/version.go")
-  fi
+if [ -z "${VERSION}" ] && [ -f "$RELEASE_ENV" ]; then
+  # shellcheck disable=SC1090
+  source "$RELEASE_ENV"
 fi
 if [ -z "${VERSION}" ]; then
-  echo "ERROR: Could not determine version (set VERSION env or ensure internal/version/version.go exists)." >&2
+  echo "ERROR: Could not determine version (set VERSION env or populate release.env)." >&2
   exit 1
 fi
 

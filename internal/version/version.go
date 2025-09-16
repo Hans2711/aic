@@ -1,7 +1,9 @@
 package version
 
+import releaseinfo "github.com/diesi/aic"
+
 // Version is a static label for this project.
 // Per project policy, set explicitly and not overridden at build time.
-const Version = "1.2.2"
+var Version = releaseinfo.Version()
 
 func Get() string { return Version }

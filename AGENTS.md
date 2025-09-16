@@ -8,14 +8,15 @@ This document helps AI assistants work effectively in this repository. It covers
 - Unit tests: `go test ./...` (no network required)
 - Integration tests (providers): run scripts in `scripts/` with the right API keys
 - Mock mode: set `AIC_MOCK=1` to avoid external API calls
-- Entry points: `cmd/aic/main.go`, version in `internal/version/version.go`
+- Entry points: `cmd/aic/main.go`, release version in `release.env`
 - Keep changes minimal and focused; do not touch unrelated files
 
 ## Repo Overview
 
 - `cmd/aic/main.go`: CLI entrypoint.
 - `internal/…`: packages for CLI, providers, config, commit generation, etc.
-- `internal/version/version.go`: static version string used by the binary.
+- `internal/version/version.go`: reads release metadata for the binary version.
+- `release.env`: single source of truth for the release version.
 - `scripts/…`: build, package, hook installers, and integration test helpers.
 - `dist/…`: build outputs per platform (created by scripts).
 - `README.md`: user‑facing docs with usage, install, and testing notes.
@@ -102,7 +103,7 @@ This document helps AI assistants work effectively in this repository. It covers
 ## Common File Paths
 
 - CLI entry: `cmd/aic/main.go`
-- Version: `internal/version/version.go`
+- Version: `release.env` (consumed via `releaseinfo` package)
 - Commit logic: `internal/commit/…`
 - Providers: `internal/provider/…`, OpenAI client: `internal/openai/…`
 - Config/env: `internal/config/…`
@@ -110,10 +111,9 @@ This document helps AI assistants work effectively in this repository. It covers
 
 ## Release Bump (manual)
 
-- Update version string in `internal/version/version.go` and rebuild.
+- Update `release.env` and rebuild.
 
 ## When in Doubt
 
 - Skim `README.md` and `scripts/` for examples before changing code.
 - Ask for confirmation if a change might impact packaging or release outputs.
-
