@@ -82,7 +82,7 @@ func generateInstructions(p provider.Provider, model string, subjects []string) 
 
 	// Prepare the prompt. Ask for a single, compact instruction set for .aic.json.
 	system := "You analyze Git commit history and produce a concise, prescriptive style guide for future commit messages. " +
-		"whether scope is used; whether subjects end with a period; imperative mood; <=92 char subject or how long it is). " +
+		"Focus on patterns such as (whether scope is used; whether subjects end with a period; imperative mood; <=92 char subject or how long it is). " +
 		"Also infer the dominant natural language of the subjects (e.g., English, Spanish, German) and include a brief directive to write messages in that language (e.g., 'Write messages in English.'). " +
 		"Output only the final instruction text suitable for a config file; do not include examples, lists, or the analyzed messages."
 	// Join subjects in a compact block. We only pass subjects, not bodies.
