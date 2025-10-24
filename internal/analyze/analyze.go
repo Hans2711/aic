@@ -77,13 +77,15 @@ func collectSubjects(limit int) ([]string, error) {
 func generateInstructions(p provider.Provider, model string, subjects []string) (string, error) {
 	if len(subjects) == 0 {
 		// With no commits, fall back to a generic instruction set favoring natural language subjects
-		return "Write concise, natural-language commit subjects in imperative mood (<=92 chars, no trailing period).", nil
+		return "Write detailed, descriptive commit subjects in imperative mood that provide meaningful context about changes (aim for 120-200 chars when detail adds value, no trailing period).", nil
 	}
 
 	// Prepare the prompt. Ask for a single, compact instruction set for .aic.json.
-	system := "You analyze Git commit history and produce a concise, prescriptive style guide for future commit messages. " +
-		"Focus on patterns such as (whether scope is used; whether subjects end with a period; imperative mood; <=92 char subject or how long it is). " +
+	system := "You analyze Git commit history and produce a comprehensive, prescriptive style guide for future commit messages that encourages detailed, meaningful descriptions. " +
+		"Focus on patterns such as (whether scope is used; whether subjects end with a period; imperative mood; typical subject length and level of detail). " +
 		"Also infer the dominant natural language of the subjects (e.g., English, Spanish, German) and include a brief directive to write messages in that language (e.g., 'Write messages in English.'). " +
+		"Strongly encourage descriptive subjects that provide meaningful context about changes, their purpose, and impact rather than overly terse messages. " +
+		"Promote commit messages that explain not just what changed but why it matters and what benefit it provides. " +
 		"Output only the final instruction text suitable for a config file; do not include examples, lists, or the analyzed messages."
 	// Join subjects in a compact block. We only pass subjects, not bodies.
 	user := "Recent commit subjects (one per line):\n" + strings.Join(subjects, "\n")
@@ -92,7 +94,7 @@ func generateInstructions(p provider.Provider, model string, subjects []string) 
 	req := openai.ChatCompletionRequest{
 		Model:       model,
 		Messages:    []openai.Message{{Role: "system", Content: system}, {Role: "user", Content: user}},
-		MaxTokens:   280,
+		MaxTokens:   512,
 		N:           1,
 		Temperature: &temp,
 	}

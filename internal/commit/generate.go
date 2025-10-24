@@ -122,12 +122,13 @@ func GenerateSuggestions(cfg Config, apiKey string) ([]string, error) {
 	if ctx != "" {
 		userContent = ctx + "\n\n" + userContent
 	}
-	systemMsg := "You write concise, natural-language Git commit subjects. " +
-		"Rules: one line per message (<=92 chars), imperative mood, no trailing period; " +
+	systemMsg := "You write detailed, descriptive Git commit subjects that provide clear context about the changes and their purpose. " +
+		"Rules: one line per message (aim for 120-200 chars to include meaningful detail, but prioritize clarity over strict length limits), imperative mood, no trailing period; " +
 		"do NOT use type prefixes or scopes (no 'feat:' or 'feat(scope):'). " +
-		"Do not mention files, authors, diffs, or explain rationale. No numbering, bullets, quotes, emojis, or reasoning. " +
+		"Include what was changed, why it matters, and relevant context when it adds value. Explain the purpose or benefit when it's not obvious from the code change. " +
+		"No numbering, bullets, quotes, emojis, or meta-commentary. " +
 		"Output: return ONLY the subjects, one per choice. " +
-		"Produce exactly " + strconv.Itoa(cfg.Suggestions) + " distinct options prioritizing the most impactful changes."
+		"Produce exactly " + strconv.Itoa(cfg.Suggestions) + " distinct options prioritizing the most impactful changes with sufficient explanatory detail."
 	if cfg.SystemAddition != "" {
 		systemMsg += " Additional user instructions: " + cfg.SystemAddition
 	}
@@ -141,7 +142,7 @@ func GenerateSuggestions(cfg Config, apiKey string) ([]string, error) {
 	resp, err := p.Chat(openai.ChatCompletionRequest{
 		Model:       cfg.Model,
 		Messages:    []openai.Message{{Role: "system", Content: systemMsg}, {Role: "user", Content: userContent}},
-		MaxTokens:   256,
+		MaxTokens:   512,
 		N:           cfg.Suggestions,
 		Temperature: &temp,
 	})
@@ -373,9 +374,12 @@ func GenerateBigCommitMessage(cfg Config, apiKey string) (string, error) {
     }
     // Explicit instruction for required output format
     systemMsg := "You write a single Git commit message composed of: " +
-        "(1) one overall summary line at the top; (2) one short line per changed file in the format 'path/to/file: short message'. " +
-        "Rules: lines separated only by \n; no blank lines; keep each line concise (<=92 chars); imperative mood; no trailing period on the top summary line; " +
+        "(1) one overall summary line at the top that explains the main purpose or impact of the changes; " +
+        "(2) one detailed line per changed file in the format 'path/to/file: descriptive message explaining what changed and why'. " +
+        "Rules: lines separated only by \n; no blank lines; make each line descriptive and informative with meaningful context " +
+        "(aim for 120-200 chars when detail adds value, prioritize clarity over brevity); imperative mood; no trailing period on the top summary line; " +
         "do NOT include types/scopes (no 'feat:'), authors, diffs, or rationale; no markdown, bullets, or quotes. " +
+        "Include the purpose, impact, or reasoning behind changes when it's not obvious from the file path. " +
         "Output EXACTLY the commit text."
     if cfg.SystemAddition != "" {
         systemMsg += " Additional user instructions: " + cfg.SystemAddition

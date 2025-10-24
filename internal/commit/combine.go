@@ -59,7 +59,7 @@ func GenerateCombinedSuggestions(cfg Config, apiKey string, selected []string) (
 	}
 	systemMsg := "You synthesize multiple draft commit messages into improved, concise natural-language Git commit subjects. " +
 		"Rules: output a single-line subject per choice, imperative mood, no trailing period; no type prefixes or scopes. " +
-		"Prefer clarity even if longer than 92 characters. Return ONLY the subjects, with no numbering or bullets. " +
+		"Prioritize clarity and meaningful detail over brevity - aim for 120-200 characters when additional context adds value. Return ONLY the subjects, with no numbering or bullets. " +
 		"Ensure each suggestion uses distinct wording and sentence structure."
 	if cfg.SystemAddition != "" {
 		systemMsg += " Additional user instructions: " + cfg.SystemAddition
@@ -75,7 +75,7 @@ func GenerateCombinedSuggestions(cfg Config, apiKey string, selected []string) (
 		Model:    cfg.Model,
 		Messages: []openai.Message{{Role: "system", Content: systemMsg}, {Role: "user", Content: userContent}},
 		// Allow longer combined subjects when helpful
-		MaxTokens:   512,
+		MaxTokens:   768,
 		N:           cfg.Suggestions,
 		Temperature: &temp,
 	})
