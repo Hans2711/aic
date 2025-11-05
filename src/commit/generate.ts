@@ -32,8 +32,6 @@ export async function generateSuggestions(cfg: SuggestionConfig): Promise<string
   if (removedCount > 0) {
     debugLog(`filtered out ${removedCount} file block(s) by prefix`);
     diff = filtered.trim() || diff;
-    // If summary mentions ignored files (e.g., dist/) after filtering, re-run summarization on filtered diff
-    summary = await progressiveSummarizeDiff(client, summarizeModel, diff, chunkBudget, finalBudget);
   }
 
   // Choose model using token count when user didn't force AIC_MODEL
