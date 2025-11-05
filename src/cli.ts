@@ -8,6 +8,7 @@ import {
   warnUnknownAICEnv,
   loadConfig,
   envBool,
+  daemonEnabled,
 } from "./config";
 import { Color, Icon, initColors } from "./ui/colors";
 import { spinner } from "./ui/spinner";
@@ -18,6 +19,7 @@ import { loadCombineConfig } from "./config";
 import { generateCombinedSuggestions } from "./commit/combine";
 import { offerCommit } from "./commit/offer";
 import { getApiKeyForProvider } from "./providers";
+import { stagedFiles } from "./git";
 
 class MainCommand extends Command {
   static paths = [Command.Default];
@@ -41,6 +43,20 @@ class MainCommand extends Command {
       this.printHelp(cfg.model);
       this.context.stderr.write(`${Color.yellow}Hint:${Color.reset} export a provider API key, e.g. ${Color.green}export OPENAI_API_KEY=sk-...${Color.reset}\n`);
       return 1;
+    }
+    // Show staged files included in the diff (transparency), unless in daemon mode
+    if (!daemonEnabled()) {
+      try {
+        const files = await stagedFiles();
+        if (files && files.length > 0) {
+          this.context.stdout.write(`${Color.gray}${Color.bold} Staged changes:${Color.reset}\n`);
+          for (const f of files) {
+            this.context.stdout.write(`  ${Color.yellow}- ${f}${Color.reset}\n`);
+          }
+        }
+      } catch {
+        // ignore errors fetching staged files
+      }
     }
     // Generate suggestions
     const stop = spinner(`Requesting ${cfg.suggestions} suggestions from ${cfg.model}`);
