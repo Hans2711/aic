@@ -34,17 +34,22 @@ async function yesNoPrompt(question: string, defYes: boolean): Promise<boolean> 
 
 function readLine(): Promise<string> {
   return new Promise((resolve) => {
+    const stdin = process.stdin;
+    // Ensure line-mode input: no raw mode, resumed, correct encoding
+    stdin.setRawMode?.(false);
+    stdin.setEncoding("utf8");
+    stdin.resume();
     let buf = "";
     const onData = (chunk: string) => {
       if (chunk === "\u0003") { // Ctrl+C
-        process.stdin.off("data", onData);
-        process.stdin.pause();
+        stdin.off("data", onData);
+        stdin.pause();
         process.exit(130);
       }
-      if (chunk === "\n" || chunk === "\r") { process.stdin.off("data", onData); process.stdin.pause(); resolve(buf); }
+      if (chunk === "\n" || chunk === "\r") { stdin.off("data", onData); stdin.pause(); resolve(buf); }
       else { buf += chunk; }
     };
-    process.stdin.on("data", onData);
+    stdin.on("data", onData);
   });
 }
 
@@ -91,16 +96,18 @@ export async function offerCommit(message: string): Promise<void> {
         const majTag = formatTag(vPrefix, major + 1, 0, 0);
         const minTag = formatTag(vPrefix, major, minor + 1, 0);
         const patTag = formatTag(vPrefix, major, minor, patch + 1);
-        const options = [
-          `Major -> ${majTag} (from ${tag})`,
-          `Minor -> ${minTag} (from ${tag})`,
-          `Patch -> ${patTag} (from ${tag})`,
-        ];
-        const choice = await selectInteractive({ title: "Select version bump", items: options });
-        let newTag = "";
-        if (choice.includes(majTag)) newTag = majTag;
-        else if (choice.includes(minTag)) newTag = minTag;
-        else if (choice.includes(patTag)) newTag = patTag;
+        // Simple numeric prompt to avoid raw-mode TTY issues
+        process.stdout.write(`${Color.gray}${Color.bold} Select version bump:${Color.reset}\n`);
+        process.stdout.write(`  ${Color.yellow}[1]${Color.reset} Major -> ${majTag} (from ${tag})\n`);
+        process.stdout.write(`  ${Color.yellow}[2]${Color.reset} Minor -> ${minTag} (from ${tag})\n`);
+        process.stdout.write(`  ${Color.yellow}[3]${Color.reset} Patch -> ${patTag} (from ${tag})\n`);
+        process.stdout.write(`\n${Color.bold}Choose [1-3]${Color.reset} ${Color.dim}[default: 3]${Color.reset}: ${Color.cyan}`);
+        const choice = (await readLine()).trim();
+        let newTag = patTag;
+        if (choice === "1") newTag = majTag;
+        else if (choice === "2") newTag = minTag;
+        else if (choice === "3" || choice === "") newTag = patTag;
+        process.stdout.write(Color.reset);
         if (!newTag) return;
         const tagMsg = await buildTagMessage(tag);
         await createTag(newTag, tagMsg);
