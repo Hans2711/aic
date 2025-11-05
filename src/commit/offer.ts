@@ -53,6 +53,25 @@ function readLine(): Promise<string> {
   });
 }
 
+async function readLineWithTimeout(ms: number, def: string): Promise<string> {
+  return new Promise(async (resolve) => {
+    let settled = false;
+    const t = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        try { process.stdin.pause(); } catch {}
+        resolve(def);
+      }
+    }, ms);
+    const ans = await readLine();
+    if (!settled) {
+      settled = true;
+      clearTimeout(t);
+      resolve(ans);
+    }
+  });
+}
+
 async function git(...args: string[]) {
   const res = await run("git", args, { stdio: "pipe" });
   if (res.code !== 0) throw new Error(res.stderr || res.stdout || `git ${args.join(" ")} failed`);
@@ -89,7 +108,24 @@ export async function offerCommit(message: string): Promise<void> {
       if (doTag) {
         const info = await latestSemverTag();
         if (!info) {
-          process.stdout.write(`${Color.yellow}No existing semver-like tag found (e.g., v1.2.3). Skipping tagging.${Color.reset}\n`);
+          const create = await yesNoPrompt("No existing semver-like tag found. Create initial tag?", false);
+          if (!create) return;
+          // 'v' prefix prompt
+          process.stdout.write(`${Color.bold}Use 'v' prefix?${Color.reset} ${Color.yellow}[Y|n]${Color.reset} ${Color.dim}[default: Y]${Color.reset}: ${Color.cyan}`);
+          const pref = (await readLineWithTimeout(30000, "")).trim().toLowerCase();
+          process.stdout.write(Color.reset);
+          const vPref = !(pref === "n" || pref === "no");
+          // initial version prompt
+          process.stdout.write(`${Color.bold}Initial version${Color.reset} ${Color.dim}[default: 0.1.0]${Color.reset}: ${Color.cyan}`);
+          let ver = (await readLineWithTimeout(30000, "")).trim();
+          process.stdout.write(Color.reset);
+          if (!/^\d+\.\d+\.\d+$/.test(ver)) ver = "0.1.0";
+          const [maj, min, pat] = ver.split(".").map((n) => parseInt(n, 10));
+          const initTag = formatTag(vPref, maj, min, pat);
+          const msg = await buildTagMessage("HEAD");
+          await createTag(initTag, msg);
+          await pushTag(initTag);
+          process.stdout.write(`${Color.green}Pushed tag:${Color.reset} ${initTag}\n`);
           return;
         }
         const { tag, vPrefix, major, minor, patch } = info;
@@ -102,7 +138,7 @@ export async function offerCommit(message: string): Promise<void> {
         process.stdout.write(`  ${Color.yellow}[2]${Color.reset} Minor -> ${minTag} (from ${tag})\n`);
         process.stdout.write(`  ${Color.yellow}[3]${Color.reset} Patch -> ${patTag} (from ${tag})\n`);
         process.stdout.write(`\n${Color.bold}Choose [1-3]${Color.reset} ${Color.dim}[default: 3]${Color.reset}: ${Color.cyan}`);
-        const choice = (await readLine()).trim();
+        const choice = (await readLineWithTimeout(60000, "")).trim();
         let newTag = patTag;
         if (choice === "1") newTag = majTag;
         else if (choice === "2") newTag = minTag;
