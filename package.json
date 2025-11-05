@@ -1,0 +1,24 @@
+{
+  "name": "aic",
+  "version": "0.0.1",
+  "description": "AI-assisted git commit message generator (TypeScript, Bun, AI SDK)",
+  "type": "module",
+  "license": "UNLICENSED",
+  "bin": {
+    "aic": "src/cli.ts"
+  },
+  "scripts": {
+    "dev": "bun run src/cli.ts -- --help",
+    "start": "bun run src/cli.ts"
+  },
+  "engines": {
+    "bun": ">=1.1.0"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^1.2.12",
+    "@ai-sdk/google": "^1.2.22",
+    "@ai-sdk/openai": "^1.3.24",
+    "ai": "^1.1.0",
+    "clipanion": "^3.2.1"
+  }
+}
