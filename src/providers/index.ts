@@ -31,15 +31,56 @@ export function getApiKeyForProvider(provider: ProviderName): string {
 
 export function newProviderClient(provider: ProviderName, apiKey: string, baseUrl?: string): ProviderClient {
   async function openaiChat(model: string, messages: ChatMessage[], maxTokens?: number, temperature?: number, n?: number): Promise<CompletionResponse> {
-    const body: any = { model, messages, temperature };
-    if (maxTokens) body.max_tokens = maxTokens;
-    if (n && n > 1) body.n = n;
-    const resp = await fetch("https://api.openai.com/v1/chat/completions", {
+    // Prefer the appropriate token budget key based on model family
+    const useCompletionKey = /\bgpt-5\b/i.test(model) || /\bo4\b/i.test(model);
+    const makeBody = (useMaxCompletion: boolean, includeTemp: boolean) => {
+      const b: any = { model, messages };
+      if (includeTemp && typeof temperature === "number") b.temperature = temperature;
+      if (maxTokens) {
+        if (useMaxCompletion) b.max_completion_tokens = maxTokens; else b.max_tokens = maxTokens;
+      }
+      if (n && n > 1) b.n = n;
+      return b;
+    };
+    let includeTemp = true;
+    let body: any = makeBody(useCompletionKey, includeTemp);
+    let resp = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    const data = await resp.json();
+    let data: any = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      const msg = data?.error?.message || "";
+      // Retry switching token key if server complains
+      if (/Unsupported parameter:\s*'max_tokens'/i.test(msg) && maxTokens) {
+        body = makeBody(true, includeTemp);
+        resp = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        data = await resp.json().catch(() => ({}));
+      } else if (/Unsupported parameter:\s*'max_completion_tokens'/i.test(msg) && maxTokens) {
+        body = makeBody(false, includeTemp);
+        resp = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        data = await resp.json().catch(() => ({}));
+      } else if (/Unsupported value:\s*'temperature'/i.test(msg) && includeTemp) {
+        // Remove temperature if the model only supports default
+        includeTemp = false;
+        body = makeBody(useCompletionKey, includeTemp);
+        resp = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        data = await resp.json().catch(() => ({}));
+      }
+    }
     if (!resp.ok) throw new Error(`openai http ${resp.status}: ${data?.error?.message || resp.statusText}`);
     const choices = (data.choices || []).map((c: any) => (c?.message?.content || "").trim());
     return { choices, raw: data };

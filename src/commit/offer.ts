@@ -1,6 +1,5 @@
 import { spawn } from "node:child_process";
 import { Color } from "../ui/colors";
-import { selectInteractive } from "../ui/select";
 import { envBool, Env } from "../config";
 
 function run(cmd: string, args: string[], opts?: { stdin?: string; stdio?: "pipe" | "inherit" }): Promise<{ code: number; stdout: string; stderr: string }> {
@@ -95,7 +94,15 @@ export async function offerCommit(message: string): Promise<void> {
 
   // Ask to commit
   const doCommit = await yesNoPrompt("Commit with this message now?", true);
-  if (!doCommit) return;
+  if (!doCommit) {
+    const ok = await copyToClipboard(message);
+    if (ok) {
+      process.stdout.write(`${Color.green}Message copied to clipboard.${Color.reset}\n`);
+    } else {
+      process.stdout.write(`${Color.yellow}Could not copy to clipboard; please copy manually.${Color.reset}\n`);
+    }
+    return;
+  }
   await gitExec("commit", "-m", message);
 
   // Ask to push
@@ -103,53 +110,7 @@ export async function offerCommit(message: string): Promise<void> {
   if (doPush) {
     try {
       await pushCurrentBranch();
-      // Ask about tagging
-      const doTag = await yesNoPrompt("Increment latest tag?", false);
-      if (doTag) {
-        const info = await latestSemverTag();
-        if (!info) {
-          const create = await yesNoPrompt("No existing semver-like tag found. Create initial tag?", false);
-          if (!create) return;
-          // 'v' prefix prompt
-          process.stdout.write(`${Color.bold}Use 'v' prefix?${Color.reset} ${Color.yellow}[Y|n]${Color.reset} ${Color.dim}[default: Y]${Color.reset}: ${Color.cyan}`);
-          const pref = (await readLineWithTimeout(30000, "")).trim().toLowerCase();
-          process.stdout.write(Color.reset);
-          const vPref = !(pref === "n" || pref === "no");
-          // initial version prompt
-          process.stdout.write(`${Color.bold}Initial version${Color.reset} ${Color.dim}[default: 0.1.0]${Color.reset}: ${Color.cyan}`);
-          let ver = (await readLineWithTimeout(30000, "")).trim();
-          process.stdout.write(Color.reset);
-          if (!/^\d+\.\d+\.\d+$/.test(ver)) ver = "0.1.0";
-          const [maj, min, pat] = ver.split(".").map((n) => parseInt(n, 10));
-          const initTag = formatTag(vPref, maj, min, pat);
-          const msg = await buildTagMessage("HEAD");
-          await createTag(initTag, msg);
-          await pushTag(initTag);
-          process.stdout.write(`${Color.green}Pushed tag:${Color.reset} ${initTag}\n`);
-          return;
-        }
-        const { tag, vPrefix, major, minor, patch } = info;
-        const majTag = formatTag(vPrefix, major + 1, 0, 0);
-        const minTag = formatTag(vPrefix, major, minor + 1, 0);
-        const patTag = formatTag(vPrefix, major, minor, patch + 1);
-        // Simple numeric prompt to avoid raw-mode TTY issues
-        process.stdout.write(`${Color.gray}${Color.bold} Select version bump:${Color.reset}\n`);
-        process.stdout.write(`  ${Color.yellow}[1]${Color.reset} Major -> ${majTag} (from ${tag})\n`);
-        process.stdout.write(`  ${Color.yellow}[2]${Color.reset} Minor -> ${minTag} (from ${tag})\n`);
-        process.stdout.write(`  ${Color.yellow}[3]${Color.reset} Patch -> ${patTag} (from ${tag})\n`);
-        process.stdout.write(`\n${Color.bold}Choose [1-3]${Color.reset} ${Color.dim}[default: 3]${Color.reset}: ${Color.cyan}`);
-        const choice = (await readLineWithTimeout(60000, "")).trim();
-        let newTag = patTag;
-        if (choice === "1") newTag = majTag;
-        else if (choice === "2") newTag = minTag;
-        else if (choice === "3" || choice === "") newTag = patTag;
-        process.stdout.write(Color.reset);
-        if (!newTag) return;
-        const tagMsg = await buildTagMessage(tag);
-        await createTag(newTag, tagMsg);
-        await pushTag(newTag);
-        process.stdout.write(`${Color.green}Pushed tag:${Color.reset} ${newTag}\n`);
-      }
+      // After push, just exit (no tag increment feature)
     } catch (e: any) {
       process.stdout.write(`${Color.yellow}Push failed:${Color.reset} ${e?.message || e}\n`);
     }
@@ -235,4 +196,19 @@ async function pushTag(tag: string): Promise<void> {
   if (remote) { await gitExec("push", remote, tag); return; }
   // Last resort
   await gitExec("push", "--tags");
+}
+
+async function copyToClipboard(msg: string): Promise<boolean> {
+  // Try common clipboard tools across platforms
+  const tools: Array<{ cmd: string; args?: string[] }> = [
+    { cmd: "pbcopy" },
+    { cmd: "wl-copy" },
+    { cmd: "xclip", args: ["-selection", "clipboard"] },
+    { cmd: "clip" },
+  ];
+  for (const t of tools) {
+    const res = await run(t.cmd, t.args || [], { stdin: msg, stdio: "pipe" });
+    if (res.code === 0) return true;
+  }
+  return false;
 }
