@@ -58,13 +58,17 @@ export async function chunkFilesByBudget(client: ProviderClient, model: string, 
 
 // Summarize a chunk into concise bullet-like lines highlighting file changes and key impacts.
 export async function summarizeChunk(client: ProviderClient, model: string, chunk: string): Promise<string> {
-  const system = "You summarize git diffs by file. For each file (<=1 line), state the nature of change (add/remove/modify/rename) and highlight API changes, new/removed public functions, dependency/version changes, security-sensitive changes, and configuration updates. After the list, include a short 'Key Impacts:' section (<=3 lines). No commit messages, no speculation.";
+  const system = "You summarize git diffs by file. For each file (<=1 line), state the nature of change (add/remove/modify/rename) and highlight API changes, new/removed public functions, dependency/version changes, security-sensitive changes, and configuration updates. After the list, include a short 'Key Impacts:' section (<=3 lines). No commit messages, no speculation. Do not ask for more information; if parts of the diff are large or missing context, still produce the best possible summary from available headers and hunks.";
   const user = chunk;
   debugLog("summarizeChunk: system prompt:", system);
   debugLog("summarizeChunk: user chunk length=", String(chunk.length));
   const resp = await client.chat({ model, messages: [ { role: "system", content: system }, { role: "user", content: user } ], maxTokens: 512, temperature: 0.2 });
-  if (!resp.choices?.length) return "";
-  return (resp.choices[0] || "").trim();
+  let out = (resp.choices?.[0] || "").trim();
+  if (!out) {
+    // Fallback: derive a minimal summary from diff headers
+    out = fallbackSummaryForChunk(chunk);
+  }
+  return out;
 }
 
 // Progressively summarize the full diff without truncation:
@@ -99,4 +103,40 @@ export async function progressiveSummarizeDiff(client: ProviderClient, model: st
   }
   debugLog("final combined summary tokens≈", String(await tokenCount(client, model, combined)));
   return combined;
+}
+
+function fallbackSummaryForChunk(chunk: string): string {
+  // Extract file paths from diff headers; support both with and without a/ b/ prefixes
+  const files = new Set<string>();
+  let m: RegExpExecArray | null;
+  const reNoPrefix = /^diff\s+--git\s+(\S+)\s+(\S+)/gm;
+  while ((m = reNoPrefix.exec(chunk)) !== null) {
+    const a = stripABPrefix(m[1]);
+    const b = stripABPrefix(m[2]);
+    files.add(b || a);
+  }
+  if (files.size === 0) {
+    const reWithPrefix = /^diff\s+--git\s+a\/(\S+)\s+b\/(\S+)/gm;
+    while ((m = reWithPrefix.exec(chunk)) !== null) {
+      const a = m[1];
+      const b = m[2];
+      files.add(b || a);
+    }
+  }
+  if (files.size === 0) {
+    const re2a = /^\+\+\+\s+b\/(\S+)/gm;
+    const re2b = /^\+\+\+\s+(\S+)/gm;
+    while ((m = re2a.exec(chunk)) !== null) files.add(m[1]);
+    while ((m = re2b.exec(chunk)) !== null) files.add(stripABPrefix(m[1]));
+  }
+  if (files.size === 0) return "(summary unavailable)";
+  const lines = Array.from(files).slice(0, 50).map((f) => `- ${f}: changed`);
+  return `Files changed (fallback):\n${lines.join("\n")}`;
+}
+
+function stripABPrefix(p: string): string {
+  if (!p) return p;
+  if (p.startsWith("a/")) return p.slice(2);
+  if (p.startsWith("b/")) return p.slice(2);
+  return p;
 }

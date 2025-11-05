@@ -34,6 +34,7 @@ export const Env = {
   CUSTOM_COMPLETIONS_PATH: "CUSTOM_COMPLETIONS_PATH",
   CUSTOM_EMBEDDINGS_PATH: "CUSTOM_EMBEDDINGS_PATH",
   CUSTOM_MODELS_PATH: "CUSTOM_MODELS_PATH",
+  AIC_IGNORE_PREFIXES: "AIC_IGNORE_PREFIXES",
 } as const;
 
 export function getEnv(key: string): string {
@@ -63,6 +64,7 @@ export function warnUnknownAICEnv() {
     Env.AIC_PROVIDER, Env.AIC_COMBINE_PROVIDER, Env.AIC_COMBINE_MODEL, Env.AIC_COMBINE_SUGGESTIONS,
     Env.CUSTOM_BASE_URL, Env.CUSTOM_CHAT_COMPLETIONS_PATH, Env.CUSTOM_COMPLETIONS_PATH,
     Env.CUSTOM_EMBEDDINGS_PATH, Env.CUSTOM_MODELS_PATH, Env.CUSTOM_API_KEY,
+    Env.AIC_IGNORE_PREFIXES,
   ]);
   let headerPrinted = false;
   for (const [k] of Object.entries(process.env)) {
@@ -81,8 +83,8 @@ export function daemonEnabled(): boolean {
 }
 
 // Model defaults (parity with Go implementation)
-const openAISmall = "gpt-5-nano";
-const openAILarge = "gpt-5-mini";
+const openAISmall = "gpt-4o-mini";
+const openAILarge = "gpt-4o";
 const claudeSmall = "claude-haiku-3";
 const claudeLarge = "claude-sonnet-4-20250514";
 const geminiSmall = "gemini-2.5-flash";
@@ -150,7 +152,6 @@ export function loadConfig(systemAddition = ""): RuntimeConfig {
   let suggestions = envIntInRange(Env.AIC_SUGGESTIONS, suggestionsDefault, 1, 10);
   const userModel = getEnv(Env.AIC_MODEL).trim();
   if (userModel) model = userModel;
-  if (provider === "openai" && model === "gpt-5") model = "gpt-5-2025-08-07";
   const bigCommit = envBool(Env.AIC_BIG_COMMIT);
   return { provider, model, suggestions, systemAddition: systemAddition.trim(), bigCommit };
 }
@@ -201,7 +202,15 @@ export function helpEnvRowsCore(): Array<[string, string]> {
     [Env.AIC_NO_COLOR, "(optional) Disable colored output (same as --no-color)"],
     [Env.AIC_BIG_COMMIT, "(optional) 1 to output a single multi-line commit"],
     [Env.AIC_DAEMON, "(optional) Print only the selected message (no extra output)"],
+    [Env.AIC_IGNORE_PREFIXES, "(optional) Ignore path prefixes in diffs (comma-separated; default: dist/,node_modules/,build/,out/,coverage/,target/,.next/,.turbo/)"],
   ];
+}
+
+export function getIgnorePrefixes(): string[] {
+  const raw = getEnv(Env.AIC_IGNORE_PREFIXES).trim();
+  const defaults = ["dist/", "node_modules/", "build/", "out/", "coverage/", "target/", ".next/", ".turbo/"];
+  if (!raw) return defaults;
+  return raw.split(",").map((s) => s.trim()).filter(Boolean);
 }
 
 export function helpEnvRowsCustom(): Array<[string, string]> {
