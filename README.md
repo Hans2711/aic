@@ -87,7 +87,6 @@ xattr -d com.apple.quarantine /usr/local/bin/aic 2>/dev/null || true
 
 ```bash
 aic [-s "extra instruction"] [--version] [--no-color]
-aic --big                  # output a single multi-line commit (summary + per-file)
 aic analyze [--limit N]    # infer repo style and write .aic.json
 ```
 
@@ -228,38 +227,7 @@ Notes:
 
 </details>
 
-<details>
-<summary><strong>Big Commit Mode</strong></summary>
-
-Produce a single commit message that contains:
-
-- Top line: one overall summary.
-- Following lines: one per changed file in the format `path/to/file: short message`.
-
-Usage:
-
-```bash
-aic --big
-# or
-export AIC_BIG_COMMIT=1; aic
-```
-
-Notes:
-
-- Prefers staged changes; if none are staged, includes all worktree changes vs HEAD.
-- Skips interactive selection and sends the full message directly to the commit confirm step.
-- Respects `-s "..."` additional instructions and repo/home `.aic.json` prompts.
-
-Example output:
-
-```
-Refactor auth and tighten validation
-cmd/server/main.go: wire new auth middleware
-internal/auth/service.go: fix token expiry check and errors
-web/handlers/login.tsx: update form field names
-```
-
-</details>
+<!-- Big Commit mode is not currently implemented. -->
 
 <details>
 <summary><strong>Git Hook</strong></summary>
@@ -304,7 +272,6 @@ Generation & UX:
 
 - `AIC_SUGGESTIONS`: number of suggestions (1–10, default 5; non-interactive default: 1).
 - `AIC_NO_COLOR`: disable colors (same as `--no-color`).
-- `AIC_BIG_COMMIT=1`: output a single multi-line commit (overall summary + per-file lines).
 - `-s "..."`: extra instruction appended to the prompt.
 
 Run modes:
@@ -332,9 +299,6 @@ Defaults (override via env):
 
 - `CUSTOM_BASE_URL` = `http://127.0.0.1:1234`
 - `CUSTOM_CHAT_COMPLETIONS_PATH` = `/v1/chat/completions`
-- `CUSTOM_COMPLETIONS_PATH` = `/v1/completions`
-- `CUSTOM_EMBEDDINGS_PATH` = `/v1/embeddings`
-- `CUSTOM_MODELS_PATH` = `/v1/models`
 - `CUSTOM_API_KEY` = optional; if set, sent as `Authorization: Bearer <key>`
 
 Examples (LM Studio):

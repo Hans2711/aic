@@ -20,10 +20,8 @@ export const Env = {
   AIC_NON_INTERACTIVE: "AIC_NON_INTERACTIVE",
   AIC_AUTO_COMMIT: "AIC_AUTO_COMMIT",
   AIC_NO_COLOR: "AIC_NO_COLOR",
-  AIC_BIG_COMMIT: "AIC_BIG_COMMIT",
   AIC_DAEMON: "AIC_DAEMON",
   AIC_DEAMON_ALIAS: "AIC_DEAMON",
-  AIC_DISABLE_REPO_CONFIG: "AIC_DISABLE_REPO_CONFIG",
 
   NO_COLOR: "NO_COLOR",
   TERM: "TERM",
@@ -31,9 +29,6 @@ export const Env = {
 
   CUSTOM_BASE_URL: "CUSTOM_BASE_URL",
   CUSTOM_CHAT_COMPLETIONS_PATH: "CUSTOM_CHAT_COMPLETIONS_PATH",
-  CUSTOM_COMPLETIONS_PATH: "CUSTOM_COMPLETIONS_PATH",
-  CUSTOM_EMBEDDINGS_PATH: "CUSTOM_EMBEDDINGS_PATH",
-  CUSTOM_MODELS_PATH: "CUSTOM_MODELS_PATH",
   AIC_IGNORE_PREFIXES: "AIC_IGNORE_PREFIXES",
 } as const;
 
@@ -60,10 +55,9 @@ export function warnUnknownAICEnv() {
   const known = new Set<string>([
     Env.AIC_MODEL, Env.AIC_MODEL_SMALL, Env.AIC_MODEL_LARGE, Env.AIC_SUGGESTIONS,
     Env.AIC_MOCK, Env.AIC_DEBUG, Env.AIC_NON_INTERACTIVE, Env.AIC_AUTO_COMMIT, Env.AIC_NO_COLOR,
-    Env.AIC_BIG_COMMIT, Env.AIC_DAEMON, Env.AIC_DEAMON_ALIAS, Env.AIC_DISABLE_REPO_CONFIG,
+    Env.AIC_DAEMON, Env.AIC_DEAMON_ALIAS,
     Env.AIC_PROVIDER, Env.AIC_COMBINE_PROVIDER, Env.AIC_COMBINE_MODEL, Env.AIC_COMBINE_SUGGESTIONS,
-    Env.CUSTOM_BASE_URL, Env.CUSTOM_CHAT_COMPLETIONS_PATH, Env.CUSTOM_COMPLETIONS_PATH,
-    Env.CUSTOM_EMBEDDINGS_PATH, Env.CUSTOM_MODELS_PATH, Env.CUSTOM_API_KEY,
+    Env.CUSTOM_BASE_URL, Env.CUSTOM_CHAT_COMPLETIONS_PATH, Env.CUSTOM_API_KEY,
     Env.AIC_IGNORE_PREFIXES,
   ]);
   let headerPrinted = false;
@@ -130,7 +124,6 @@ export type RuntimeConfig = {
   model: string;
   suggestions: number;
   systemAddition: string;
-  bigCommit: boolean;
 };
 
 export function autodetectProvider(): ProviderName {
@@ -152,8 +145,7 @@ export function loadConfig(systemAddition = ""): RuntimeConfig {
   let suggestions = envIntInRange(Env.AIC_SUGGESTIONS, suggestionsDefault, 1, 10);
   const userModel = getEnv(Env.AIC_MODEL).trim();
   if (userModel) model = userModel;
-  const bigCommit = envBool(Env.AIC_BIG_COMMIT);
-  return { provider, model, suggestions, systemAddition: systemAddition.trim(), bigCommit };
+  return { provider, model, suggestions, systemAddition: systemAddition.trim() };
 }
 
 export function loadCombineConfig(systemAddition = ""): RuntimeConfig {
@@ -178,7 +170,7 @@ export function loadCombineConfig(systemAddition = ""): RuntimeConfig {
 
   // Suggestions override for combine
   const suggestions = envIntInRange(Env.AIC_COMBINE_SUGGESTIONS, base.suggestions, 1, 10);
-  return { provider, model, suggestions, systemAddition: base.systemAddition, bigCommit: base.bigCommit };
+  return { provider, model, suggestions, systemAddition: base.systemAddition };
 }
 
 export function helpEnvRowsCore(): Array<[string, string]> {
@@ -200,9 +192,12 @@ export function helpEnvRowsCore(): Array<[string, string]> {
     [Env.AIC_NON_INTERACTIVE, "(optional) 1 to auto-select first suggestion & skip commit"],
     [Env.AIC_AUTO_COMMIT, "(optional) With NON_INTERACTIVE, also perform the commit"],
     [Env.AIC_NO_COLOR, "(optional) Disable colored output (same as --no-color)"],
-    [Env.AIC_BIG_COMMIT, "(optional) 1 to output a single multi-line commit"],
-    [Env.AIC_DAEMON, "(optional) Print only the selected message (no extra output)"],
+    [Env.AIC_DAEMON, "(optional) Daemon mode: minimal output; use worktree diff"],
+    [Env.AIC_DEAMON_ALIAS, "(alias) Legacy spelling; same as AIC_DAEMON"],
     [Env.AIC_IGNORE_PREFIXES, "(optional) Ignore path prefixes in diffs (comma-separated; default: dist/,node_modules/,build/,out/,coverage/,target/,.next/,.turbo/)"],
+    [Env.NO_COLOR, "(optional) Standard flag to disable colors"],
+    [Env.TERM, "(optional) Terminal type; affects color detection"],
+    [Env.COLUMNS, "(optional) Terminal width override for UI"],
   ];
 }
 
@@ -217,8 +212,5 @@ export function helpEnvRowsCustom(): Array<[string, string]> {
   return [
     [Env.CUSTOM_BASE_URL, "(custom) Base URL [default: http://127.0.0.1:1234]"],
     [Env.CUSTOM_CHAT_COMPLETIONS_PATH, "(custom) Chat endpoint path [default: /v1/chat/completions]"],
-    [Env.CUSTOM_COMPLETIONS_PATH, "(custom) Completions path [default: /v1/completions]"],
-    [Env.CUSTOM_EMBEDDINGS_PATH, "(custom) Embeddings path [default: /v1/embeddings]"],
-    [Env.CUSTOM_MODELS_PATH, "(custom) Models path [default: /v1/models]"],
   ];
 }

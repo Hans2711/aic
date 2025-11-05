@@ -24,6 +24,21 @@ import { stagedFiles } from "./git";
 class MainCommand extends Command {
   static paths = [Command.Default];
 
+  // Enrich built-in --help with environment variables
+  static usage = Command.Usage({
+    description: "AI-assisted git commit message generator",
+    details: (() => {
+      const rows = [...helpEnvRowsCore(), ...helpEnvRowsCustom()];
+      const maxKey = rows.reduce((m, [k]) => Math.max(m, k.length), 0);
+      const pad = (s: string) => s + " ".repeat(maxKey - s.length);
+      const lines: string[] = [];
+      lines.push("Environment variables:");
+      lines.push("");
+      for (const [k, v] of rows) lines.push(`  ${pad(k)}  ${v}`);
+      return lines.join("\n");
+    })(),
+  });
+
   version = Option.Boolean("-v,--version", false, { description: "Show version and exit" });
   noColor = Option.Boolean("--no-color", false, { description: "Disable colored output" });
   systemAddition = Option.String("-s", { required: false, description: "Extra instruction for prompts" });
