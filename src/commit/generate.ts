@@ -5,8 +5,45 @@ import { wrapCommitMessage } from "./wrap";
 import { stripLeadingListMarker } from "./listmarker";
 import { envBool, loadConfig, daemonEnabled, modelForTokens, Env, getIgnorePrefixes } from "../config";
 import { debugLog } from "../debug";
+import { estimateTokens, fingerprintText } from "./tokens";
 
 export type SuggestionConfig = ReturnType<typeof loadConfig> & { provider: ProviderName };
+
+const NON_SOURCE_DIR_PREFIXES = [
+  "dist/",
+  "bin/",
+  "build/",
+  "out/",
+  "coverage/",
+  "node_modules/",
+  "vendor/",
+  "tmp/",
+  "temp/",
+];
+
+const NON_SOURCE_EXTENSIONS = [
+  ".txt",
+  ".log",
+  ".csv",
+  ".tsv",
+  ".lock",
+  ".patch",
+  ".ico",
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".gif",
+  ".mp4",
+  ".mp3",
+  ".zip",
+  ".tar",
+  ".gz",
+  ".tgz",
+  ".xz",
+  ".7z",
+];
+
+const MAX_NON_SOURCE_BLOCK_CHARS = 120_000;
 
 export async function generateSuggestions(cfg: SuggestionConfig): Promise<string[]> {
   if (envBool(Env.AIC_MOCK)) {
@@ -37,14 +74,14 @@ export async function generateSuggestions(cfg: SuggestionConfig): Promise<string
   // Choose model using token count when user didn't force AIC_MODEL
   const forcedModel = (process.env.AIC_MODEL ?? "").trim();
   let chosenModel = cfg.model;
-  if (!forcedModel && typeof (client as any).countTokens === "function") {
-    try {
-      const t = await (client as any).countTokens(cfg.model, diff);
-      debugLog("diff tokens≈", String(t));
-      chosenModel = modelForTokens(cfg.provider, t);
-    } catch {
-      // keep existing
-    }
+  if (!forcedModel) {
+    const diffTokens = await estimateTokens(client, cfg.model, diff, {
+      budgetTokens: 120_000,
+      cacheKey: fingerprintText(diff, `${cfg.model}:full-diff`),
+      label: "full-diff-model-select",
+    });
+    debugLog("diff tokens≈", String(diffTokens));
+    chosenModel = modelForTokens(cfg.provider, diffTokens);
   }
   debugLog("provider=", cfg.provider, "model=", chosenModel, forcedModel ? "(forced)" : "(auto)");
 
@@ -397,14 +434,22 @@ async function enforceContextLimit(
 
   const fallback: { userContent: string; note?: string } = { userContent: baseContent };
 
+  let attemptIndex = 0;
   for (const attempt of attempts) {
     const noteSegment = attempt.note ? attempt.note + "\n\n" : "";
     const candidateContent = baseContent + noteSegment + (attempt.raw || "");
     if (candidateContent.length > MAX_CONTEXT_CHARS) {
       debugLog(`context length ${candidateContent.length} chars exceeds soft cap ${MAX_CONTEXT_CHARS}`);
+      attemptIndex++;
       continue;
     }
-    const tokenEstimate = await estimateTokens(client, model, systemMsg, candidateContent);
+    const combined = `SYSTEM:\n${systemMsg}\nUSER:\n${candidateContent}`;
+    const tokenEstimate = await estimateTokens(client, model, combined, {
+      budgetTokens: MAX_CONTEXT_TOKENS,
+      cacheKey: fingerprintText(combined, `${model}:context-${attemptIndex}`),
+      label: "context-candidate",
+    });
+    attemptIndex++;
     if (tokenEstimate <= MAX_CONTEXT_TOKENS) {
       if (attempt.note && attempt.raw) {
         debugLog(`context trimmed: ${attempt.note}`);
@@ -417,21 +462,6 @@ async function enforceContextLimit(
   }
 
   return fallback;
-}
-
-async function estimateTokens(client: any, model: string, systemMsg: string, userContent: string): Promise<number> {
-  const estimator = client && typeof client.countTokens === "function" ? client.countTokens.bind(client) : null;
-  const text = `SYSTEM:\n${systemMsg}\nUSER:\n${userContent}`;
-  if (estimator) {
-    try {
-      const value = await estimator(model, text);
-      if (typeof value === "number" && !Number.isNaN(value)) return value;
-    } catch (err) {
-      debugLog("countTokens failed during context estimate", String(err));
-    }
-  }
-  // Fallback heuristic: assume ~4 characters per token
-  return Math.ceil(text.length / 4);
 }
 
 function buildRawDiffBlock(diff: string): { block: string; note?: string } {
@@ -562,9 +592,35 @@ function filterDiffByPrefixes(diff: string, prefixes: string[]): { filtered: str
       removed++;
       continue;
     }
+    if (path && shouldSkipDiffBlock(path, block)) {
+      debugLog(`filtered diff block by heuristic: ${path}`);
+      removed++;
+      continue;
+    }
     kept.push(block);
   }
   return { filtered: kept.join("\n"), removedCount: removed };
+}
+
+function shouldSkipDiffBlock(path: string, block: string): boolean {
+  const lower = path.toLowerCase();
+  if (NON_SOURCE_DIR_PREFIXES.some((dir) => lower.startsWith(dir))) return true;
+  if (NON_SOURCE_EXTENSIONS.some((ext) => lower.endsWith(ext))) return true;
+  if (isLikelyBinaryBlock(block)) return true;
+  if (isLikelyHugeDiff(block, lower)) return true;
+  return false;
+}
+
+function isLikelyBinaryBlock(block: string): boolean {
+  return /Binary files\s+[ab]\//i.test(block) || /GIT binary patch/i.test(block);
+}
+
+function isLikelyHugeDiff(block: string, lowerPath: string): boolean {
+  if (block.length <= MAX_NON_SOURCE_BLOCK_CHARS) return false;
+  // Allow large code diffs that contain hunk headers
+  if (/^@@/m.test(block)) return false;
+  if (NON_SOURCE_EXTENSIONS.some((ext) => lowerPath.endsWith(ext))) return true;
+  return false;
 }
 
 function stripAB(p: string): string {

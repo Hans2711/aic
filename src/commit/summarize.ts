@@ -1,5 +1,8 @@
 import type { ProviderClient } from "../providers";
 import { debugLog } from "../debug";
+import { estimateTokens, fingerprintText } from "./tokens";
+
+const chunkSummaryCache = new Map<string, string>();
 
 // Split a unified diff into file-level blocks using lines starting with "diff --git ".
 export function splitDiffIntoFiles(diff: string): string[] {
@@ -20,14 +23,6 @@ export function splitDiffIntoFiles(diff: string): string[] {
   return blocks;
 }
 
-async function tokenCount(client: ProviderClient, model: string, text: string): Promise<number> {
-  if (typeof client.countTokens === "function") {
-    try { return await client.countTokens(model, text); } catch {}
-  }
-  // Fallback heuristic
-  return Math.ceil([...text].length / 4);
-}
-
 // Group file blocks into chunks so that each chunk's token count is <= budget.
 export async function chunkFilesByBudget(client: ProviderClient, model: string, files: string[], budgetTokens: number): Promise<string[]> {
   const chunks: string[] = [];
@@ -35,19 +30,31 @@ export async function chunkFilesByBudget(client: ProviderClient, model: string, 
   let curTokens = 0;
   for (const originalFile of files) {
     let file = originalFile;
-    let tok = await tokenCount(client, model, file);
+    let tok = await estimateTokens(client, model, file, {
+      budgetTokens,
+      cacheKey: fingerprintText(file, `${model}:diff-block`),
+      label: "diff-block",
+    });
     debugLog(`file chunk candidate tokens=${tok}, length=${file.length}`);
     if (tok > budgetTokens) {
       const shrunk = shrinkDiffForSummarization(file, budgetTokens);
       if (shrunk.modified) {
         file = shrunk.content;
-        tok = await tokenCount(client, model, file);
+        tok = await estimateTokens(client, model, file, {
+          budgetTokens,
+          cacheKey: fingerprintText(file, `${model}:diff-block-shrunk`),
+          label: "diff-block-shrunk",
+        });
         debugLog(`shrunk large diff block; tokens≈${tok}, length=${file.length}`);
       }
       if (tok > budgetTokens) {
         const stub = buildLargeDiffStubForSummaries(file);
         file = stub;
-        tok = await tokenCount(client, model, file);
+        tok = await estimateTokens(client, model, file, {
+          budgetTokens,
+          cacheKey: fingerprintText(file, `${model}:diff-block-stub`),
+          label: "diff-block-stub",
+        });
         debugLog(`replaced diff block with stub; tokens≈${tok}, length=${file.length}`);
       }
     }
@@ -86,6 +93,43 @@ export async function summarizeChunk(client: ProviderClient, model: string, chun
   return out;
 }
 
+async function summarizeChunksConcurrently(
+  client: ProviderClient,
+  model: string,
+  chunks: string[],
+  concurrency: number,
+  label: string,
+): Promise<string[]> {
+  const total = chunks.length;
+  const results = new Array<string>(total);
+  let nextIndex = 0;
+  const workerCount = Math.max(1, Math.min(concurrency, total));
+
+  const workers = Array.from({ length: workerCount }, () =>
+    (async () => {
+      while (true) {
+        const current = nextIndex;
+        if (current >= total) return;
+        nextIndex++;
+        const chunk = chunks[current];
+        const cacheKey = fingerprintText(chunk, `${model}:summary:${label}`);
+        const cached = chunkSummaryCache.get(cacheKey);
+        if (typeof cached === "string") {
+          results[current] = cached;
+          continue;
+        }
+        const summary = await summarizeChunk(client, model, chunk);
+        chunkSummaryCache.set(cacheKey, summary);
+        debugLog(`summarizeChunk worker(${label}) completed index=${current}`);
+        results[current] = summary;
+      }
+    })()
+  );
+
+  await Promise.all(workers);
+  return results;
+}
+
 // Progressively summarize the full diff without truncation:
 // 1) split by file boundaries
 // 2) pack into chunks by token budget
@@ -96,27 +140,28 @@ export async function progressiveSummarizeDiff(client: ProviderClient, model: st
   debugLog(`progressiveSummarizeDiff: files=${files.length}, chunkBudget=${chunkBudgetTokens}, targetBudget=${targetBudgetTokens}`);
   // First-level chunking
   let chunks = await chunkFilesByBudget(client, model, files, chunkBudgetTokens);
-  let summaries: string[] = [];
-  for (let i = 0; i < chunks.length; i++) {
-    const s = await summarizeChunk(client, model, chunks[i]);
-    summaries.push(`Chunk ${i + 1}/${chunks.length}\n${s}`);
-  }
+  let rawSummaries = await summarizeChunksConcurrently(client, model, chunks, Math.min(3, Math.max(1, chunks.length)), "primary");
+  let summaries = rawSummaries.map((s, i) => `Chunk ${i + 1}/${chunks.length}\n${s}`);
   let combined = summaries.join("\n\n");
   // Re-summarize until within target budget
-  while (await tokenCount(client, model, combined) > targetBudgetTokens && summaries.length > 1) {
+  while (await estimateTokens(client, model, combined, {
+    budgetTokens: targetBudgetTokens,
+    cacheKey: fingerprintText(combined, `${model}:combined-summary`),
+    label: "combined-summary",
+  }) > targetBudgetTokens && summaries.length > 1) {
     debugLog("combined summary over target budget; re-chunking for second-pass summarization");
     // Re-group summaries by budget and summarize groups
     const groupChunks = await chunkFilesByBudget(client, model, summaries, Math.max(512, Math.floor(targetBudgetTokens * 0.8)));
-    const next: string[] = [];
-    for (let i = 0; i < groupChunks.length; i++) {
-      const s = await summarizeChunk(client, model, groupChunks[i]);
-      next.push(s);
-    }
-    summaries = next;
+    const nextRaw = await summarizeChunksConcurrently(client, model, groupChunks, Math.min(2, Math.max(1, groupChunks.length)), "secondary");
+    summaries = nextRaw;
     combined = summaries.join("\n\n");
     if (summaries.length === 1) break;
   }
-  debugLog("final combined summary tokens≈", String(await tokenCount(client, model, combined)));
+  debugLog("final combined summary tokens≈", String(await estimateTokens(client, model, combined, {
+    budgetTokens: targetBudgetTokens,
+    cacheKey: fingerprintText(combined, `${model}:combined-summary-final`),
+    label: "combined-summary-final",
+  })));
   return combined;
 }
 
