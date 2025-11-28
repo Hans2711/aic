@@ -33,9 +33,24 @@ export async function chunkFilesByBudget(client: ProviderClient, model: string, 
   const chunks: string[] = [];
   let buf: string[] = [];
   let curTokens = 0;
-  for (const file of files) {
-    const tok = await tokenCount(client, model, file);
+  for (const originalFile of files) {
+    let file = originalFile;
+    let tok = await tokenCount(client, model, file);
     debugLog(`file chunk candidate tokens=${tok}, length=${file.length}`);
+    if (tok > budgetTokens) {
+      const shrunk = shrinkDiffForSummarization(file, budgetTokens);
+      if (shrunk.modified) {
+        file = shrunk.content;
+        tok = await tokenCount(client, model, file);
+        debugLog(`shrunk large diff block; tokens≈${tok}, length=${file.length}`);
+      }
+      if (tok > budgetTokens) {
+        const stub = buildLargeDiffStubForSummaries(file);
+        file = stub;
+        tok = await tokenCount(client, model, file);
+        debugLog(`replaced diff block with stub; tokens≈${tok}, length=${file.length}`);
+      }
+    }
     if (buf.length === 0) {
       buf.push(file);
       curTokens = tok;
@@ -132,6 +147,37 @@ function fallbackSummaryForChunk(chunk: string): string {
   if (files.size === 0) return "(summary unavailable)";
   const lines = Array.from(files).slice(0, 50).map((f) => `- ${f}: changed`);
   return `Files changed (fallback):\n${lines.join("\n")}`;
+}
+
+function shrinkDiffForSummarization(diffBlock: string, _targetTokens: number): { content: string; modified: boolean } {
+  const MAX_TOTAL_LINES = 360;
+  const HEAD_LINES = 200;
+  const TAIL_LINES = 120;
+  const MAX_CHARS = 80_000;
+  if (!diffBlock) return { content: diffBlock, modified: false };
+  const lines = diffBlock.split(/\r?\n/);
+  if (lines.length <= MAX_TOTAL_LINES && diffBlock.length <= MAX_CHARS) {
+    return { content: diffBlock, modified: false };
+  }
+  const headerLines = Math.min(20, lines.length);
+  const head = lines.slice(headerLines, Math.min(headerLines + HEAD_LINES, lines.length));
+  const tail = TAIL_LINES > 0 ? lines.slice(-TAIL_LINES) : [];
+  const marker = `... (diff truncated for summarization; showing first ${head.length} and last ${tail.length} body lines) ...`;
+  const combinedLines = [...lines.slice(0, headerLines), ...head];
+  if (tail.length) combinedLines.push(marker, ...tail);
+  else combinedLines.push(marker);
+  let content = combinedLines.join("\n");
+  if (content.length > MAX_CHARS) {
+    content = content.slice(0, MAX_CHARS) + "\n... (diff further truncated for summarization due to size) ...";
+  }
+  return { content, modified: true };
+}
+
+function buildLargeDiffStubForSummaries(diffBlock: string): string {
+  const lines = diffBlock.split(/\r?\n/);
+  const header = lines.find((ln) => ln.startsWith("diff --git ")) ?? lines[0] ?? "diff --git a/??? b/???";
+  const pathLine = lines.find((ln) => ln.startsWith("+++ ")) ?? lines.find((ln) => ln.startsWith("--- ")) ?? "(path unavailable)";
+  return `${header}\n${pathLine}\n... (diff omitted for summarization due to size; rely on impact analysis) ...`;
 }
 
 function stripABPrefix(p: string): string {

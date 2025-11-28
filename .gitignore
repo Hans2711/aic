@@ -2,3 +2,4 @@
 .gopath
 .gocache
 .aic.json
+.DS_Store
