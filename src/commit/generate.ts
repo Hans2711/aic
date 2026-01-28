@@ -74,21 +74,21 @@ export async function generateSuggestions(cfg: SuggestionConfig): Promise<string
   }
   userContent += "--- BEGIN RAW DIFF ---\n" + diff + "\n--- END RAW DIFF ---";
 
-  let systemMsg = "You write detailed, descriptive Git commit subjects that provide clear context about the changes and their purpose. " +
+  let systemMsg = "You write detailed, descriptive Git commit subjects that provide clear context about the changes. " +
     "Rules: write messages with meaningful detail, imperative mood, no trailing period; " +
     "Do NOT use type prefixes or scopes (no 'feat:' or 'feat(scope):'). " +
-    "Include what changed and why it matters when helpful. " +
+    "Describe only what changed in clear, specific terms. Do NOT include why the change was made. " +
     "If the message would exceed 80 characters, wrap ONLY between sentences; never break mid-sentence. If a sentence exceeds 80 characters, keep it on a single line. " +
     "Ground your subjects strictly on the provided FILES CHANGED, HIGHLIGHTS, DIFF SUMMARY, and RAW DIFF; do not ask for additional input or return placeholders. " +
     "First determine which change is most important/impactful (e.g., largest scope, user-facing effects, architectural/security implications, or release-impacting) and prioritize that in the subject. Do not default to the first file or first bullet in the summary; choose based on impact. If several small changes share a theme, prefer a unifying subject. " +
-    "Produce distinct alternatives with different phrasing and emphasis (varied verbs, structures, focus). Prefer richer, more informative subjects; where appropriate, reflect top HIGHLIGHTS explicitly; include brief rationale or impact if helpful (use a second line if needed). " +
+    "Produce distinct alternatives with different phrasing and emphasis (varied verbs, structures, focus). Prefer richer, more informative subjects; where appropriate, reflect top HIGHLIGHTS explicitly; include specific details about the changes themselves, but never explain rationale, motivation, or reasons for the change (use a second line if needed). " +
     "Output only the subjects, one per choice.";
   if (cfg.systemAddition) systemMsg += " Additional user instructions: " + cfg.systemAddition;
   debugLog("suggestions system prompt:", systemMsg);
 
   // Temperature and limits
   const temperature = 0.6; // encourage diversity
-  const maxTokens = 768;   // allow larger, more detailed subjects
+  const maxTokens = chosenModel.includes('gpt-5') ? 1500 : 768;   // reasoning models need more tokens
 
   const messages = [
     { role: "system" as const, content: systemMsg },
@@ -100,18 +100,40 @@ export async function generateSuggestions(cfg: SuggestionConfig): Promise<string
   const seen = new Set<string>();
   const target = Math.max(1, cfg.suggestions);
   let attempts = 0;
+  let retriedWithFallback = false;
+  
   while (suggestions.length < target && attempts < target * 3) {
     attempts++;
     const need = Math.max(1, target - suggestions.length);
-    const resp = await client.chat({ model: chosenModel, messages, maxTokens, temperature, n: need });
-    for (const raw of resp.choices) {
-      const cleaned = postProcess(raw);
-      const norm = cleaned.toLowerCase();
-      if (cleaned && !seen.has(norm)) {
-        seen.add(norm);
-        suggestions.push(cleaned);
+    
+    try {
+      const resp = await client.chat({ model: chosenModel, messages, maxTokens, temperature, n: need });
+      let emptyCount = 0;
+      for (const raw of resp.choices) {
+        if (!raw || !raw.trim()) emptyCount++;
+        const cleaned = postProcess(raw);
+        const norm = cleaned.toLowerCase();
+        if (cleaned && !seen.has(norm)) {
+          seen.add(norm);
+          suggestions.push(cleaned);
+        }
+        if (suggestions.length >= target) break;
       }
-      if (suggestions.length >= target) break;
+      // Fail fast if all responses were empty (reasoning model using all tokens)
+      if (emptyCount === resp.choices.length && emptyCount > 0) {
+        throw new Error(`Model returned ${emptyCount} empty response(s). Reasoning model may be using all tokens for internal reasoning.`);
+      }
+    } catch (error: any) {
+      // If reasoning model fails with empty responses and we haven't retried yet, fallback to gpt-4o
+      if (!retriedWithFallback && chosenModel.includes('gpt-5') && error.message.includes('empty response')) {
+        debugLog(`Reasoning model ${chosenModel} failed with empty responses, falling back to gpt-4o`);
+        chosenModel = 'gpt-4o';
+        retriedWithFallback = true;
+        attempts--; // Don't count this as an attempt
+        continue; // Retry with fallback model
+      }
+      // Otherwise, re-throw the error
+      throw error;
     }
   }
   if (suggestions.length === 0) throw new Error("empty suggestions");

@@ -1,5 +1,10 @@
 import type { ProviderName } from "../config";
 import { Env, getEnv } from "../config";
+import { generateText } from 'ai';
+import { createOpenAI } from '@ai-sdk/openai';
+import { createAnthropic } from '@ai-sdk/anthropic';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { debugLog } from "../debug";
 
 export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 
@@ -29,170 +34,157 @@ export function getApiKeyForProvider(provider: ProviderName): string {
   }
 }
 
+function createProviderInstance(provider: ProviderName, apiKey: string, baseUrl?: string) {
+  switch (provider) {
+    case "claude":
+      return createAnthropic({ apiKey });
+    case "gemini":
+      return createGoogleGenerativeAI({ apiKey });
+    case "custom":
+      return createOpenAI({ 
+        apiKey, 
+        baseURL: baseUrl || getEnv(Env.CUSTOM_BASE_URL) || "http://127.0.0.1:1234",
+        compatibility: 'compatible', // Enable compatibility mode for custom providers
+      });
+    case "openai":
+    default:
+      return createOpenAI({ apiKey });
+  }
+}
+
+// Helper function to detect GPT-5 reasoning models
+function isReasoningModel(model: string): boolean {
+  const lowerModel = model.toLowerCase();
+  return lowerModel.startsWith('gpt-5') || 
+         lowerModel.startsWith('o1') || 
+         lowerModel.startsWith('o3') ||
+         lowerModel.startsWith('o4');
+}
+
 export function newProviderClient(provider: ProviderName, apiKey: string, baseUrl?: string): ProviderClient {
-  async function openaiChat(model: string, messages: ChatMessage[], maxTokens?: number, temperature?: number, n?: number): Promise<CompletionResponse> {
-    // Prefer the appropriate token budget key based on model family
-    const useCompletionKey = /\bgpt-5\b/i.test(model) || /\bo4\b/i.test(model);
-    const makeBody = (useMaxCompletion: boolean, includeTemp: boolean) => {
-      const b: any = { model, messages };
-      if (includeTemp && typeof temperature === "number") b.temperature = temperature;
-      if (maxTokens) {
-        if (useMaxCompletion) b.max_completion_tokens = maxTokens; else b.max_tokens = maxTokens;
-      }
-      if (n && n > 1) b.n = n;
-      return b;
-    };
-    let includeTemp = true;
-    let body: any = makeBody(useCompletionKey, includeTemp);
-    let resp = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    let data: any = await resp.json().catch(() => ({}));
-    if (!resp.ok) {
-      const msg = data?.error?.message || "";
-      // Retry switching token key if server complains
-      if (/Unsupported parameter:\s*'max_tokens'/i.test(msg) && maxTokens) {
-        body = makeBody(true, includeTemp);
-        resp = await fetch("https://api.openai.com/v1/chat/completions", {
-          method: "POST",
-          headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-        data = await resp.json().catch(() => ({}));
-      } else if (/Unsupported parameter:\s*'max_completion_tokens'/i.test(msg) && maxTokens) {
-        body = makeBody(false, includeTemp);
-        resp = await fetch("https://api.openai.com/v1/chat/completions", {
-          method: "POST",
-          headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-        data = await resp.json().catch(() => ({}));
-      } else if (/Unsupported value:\s*'temperature'/i.test(msg) && includeTemp) {
-        // Remove temperature if the model only supports default
-        includeTemp = false;
-        body = makeBody(useCompletionKey, includeTemp);
-        resp = await fetch("https://api.openai.com/v1/chat/completions", {
-          method: "POST",
-          headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-        data = await resp.json().catch(() => ({}));
-      }
-    }
-    if (!resp.ok) throw new Error(`openai http ${resp.status}: ${data?.error?.message || resp.statusText}`);
-    const choices = (data.choices || []).map((c: any) => (c?.message?.content || "").trim());
-    return { choices, raw: data };
-  }
-
-  async function claudeChat(model: string, messages: ChatMessage[], maxTokens?: number, temperature?: number): Promise<CompletionResponse> {
-    const sys = messages.find((m) => m.role === "system")?.content || "";
-    const userMsgs = messages.filter((m) => m.role !== "system").map((m) => ({ role: m.role, content: m.content }));
-    const body: any = { model, messages: userMsgs };
-    if (sys) body.system = sys;
-    body.max_tokens = maxTokens ?? 256;
-    if (temperature !== undefined) body.temperature = temperature;
-    const resp = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "x-api-key": apiKey,
-        "content-type": "application/json",
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify(body),
-    });
-    const data = await resp.json();
-    if (!resp.ok) throw new Error(`claude http ${resp.status}: ${data?.error?.message || resp.statusText}`);
-    const text = (data?.content || []).map((c: any) => (c?.text || "")).join("");
-    return { choices: [text.trim()], raw: data };
-  }
-
-  async function geminiChat(model: string, messages: ChatMessage[], maxTokens?: number, temperature?: number, n?: number): Promise<CompletionResponse> {
-    const sys = messages.find((m) => m.role === "system")?.content || "";
-    const contents = messages.filter((m) => m.role !== "system").map((m) => ({ role: m.role === "assistant" ? "model" : m.role, parts: [{ text: m.content }] }));
-    const genConfig: any = {};
-    if (maxTokens) genConfig.maxOutputTokens = maxTokens;
-    if (temperature !== undefined) genConfig.temperature = temperature;
-    if (n && n > 1) genConfig.candidateCount = n;
-    genConfig.responseMimeType = "text/plain";
-    if (contents.length === 0) contents.push({ role: "user", parts: [{ text: "" }] });
-    const body: any = { contents, generationConfig: genConfig };
-    if (sys) body.systemInstruction = { parts: [{ text: sys }] };
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
-    const resp = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-    const data = await resp.json();
-    if (!resp.ok) throw new Error(`gemini http ${resp.status}: ${data?.error?.message || resp.statusText}`);
-    const choices = (data?.candidates || []).map((c: any) => (c?.content?.parts || []).map((p: any) => p?.text || "").join("").trim());
-    return { choices: choices.length ? choices : [""], raw: data };
-  }
-
-  async function customChat(model: string, messages: ChatMessage[], maxTokens?: number, temperature?: number, n?: number): Promise<CompletionResponse> {
-    const base = (baseUrl || getEnv(Env.CUSTOM_BASE_URL) || "http://127.0.0.1:1234").replace(/\/$/, "");
-    const path = getEnv(Env.CUSTOM_CHAT_COMPLETIONS_PATH) || "/v1/chat/completions";
-    const url = base + (path.startsWith("/") ? path : "/" + path);
-    let body: any = { model, messages, temperature };
-    if (maxTokens) body.max_tokens = maxTokens;
-    if (n && n > 1) body.n = n;
-    const headers: Record<string, string> = { "content-type": "application/json" };
-    if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
-    let resp = await fetch(url, { method: "POST", headers, body: JSON.stringify(body) });
-    let data: any = await resp.json().catch(() => ({}));
-    if (!resp.ok) {
-      const msg = typeof data === 'string' ? data : data?.error?.message || "";
-      // Retry handling for compatibility
-      if (/Unsupported parameter: 'max_tokens'/i.test(msg)) {
-        body = { model, messages, temperature };
-        if (maxTokens) body.max_completion_tokens = maxTokens;
-        resp = await fetch(url, { method: "POST", headers, body: JSON.stringify(body) });
-        data = await resp.json().catch(() => ({}));
-      } else if (/Unsupported value: 'temperature'/i.test(msg) && temperature !== undefined) {
-        body = { model, messages };
-        if (maxTokens) body.max_tokens = maxTokens;
-        resp = await fetch(url, { method: "POST", headers, body: JSON.stringify(body) });
-        data = await resp.json().catch(() => ({}));
-      }
-      if (!resp.ok) throw new Error(`custom http ${resp.status}: ${typeof data === 'string' ? data : data?.error?.message || resp.statusText}`);
-    }
-    // Merge choices content (and strip reasoning tags if present)
-    const join = (data?.choices || []).map((c: any) => (c?.message?.content || "")).join("\n");
-    const cleaned = stripReasoning(join).trim();
-    if (cleaned) return { choices: [cleaned], raw: data };
-    const choices = (data?.choices || []).map((c: any) => (c?.message?.content || "").trim());
-    return { choices, raw: data };
-  }
-
-  function stripReasoning(s: string): string {
-    return s.replace(/<think\b[^>]*>[\s\S]*?<\/think>/gi, "").replace(/<\/??think\b[^>]*>/gi, "");
-  }
+  const providerInstance = createProviderInstance(provider, apiKey, baseUrl);
 
   return {
     async chat({ model, messages, maxTokens, temperature, n = 1 }): Promise<CompletionResponse> {
       const choices: string[] = [];
-      let raw: unknown = undefined;
-      const run = async () => {
-        if (provider === "claude") return await claudeChat(model, messages, maxTokens, temperature);
-        if (provider === "gemini") return await geminiChat(model, messages, maxTokens, temperature, n);
-        if (provider === "custom") return await customChat(model, messages, maxTokens, temperature, n);
-        return await openaiChat(model, messages, maxTokens, temperature, n);
-      };
-      for (let i = 0; i < Math.max(1, n); i++) {
-        const res = await run();
-        raw = res.raw;
-        for (const c of res.choices) {
-          const t = (c || "").trim();
-          if (t) choices.push(t);
+      let rawResult: any;
+
+      // Detect if this is a reasoning model
+      const isReasoning = provider === "openai" && isReasoningModel(model);
+      
+      // For reasoning models, significantly increase token limit to allow both reasoning and output
+      let effectiveMaxTokens = maxTokens;
+      if (isReasoning && (!maxTokens || maxTokens < 3000)) {
+        effectiveMaxTokens = 4000; // Increased from 1500 to 4000
+        debugLog(`Reasoning model detected: ${model}, increasing maxTokens to ${effectiveMaxTokens}`);
+      }
+
+      // Handle multiple completions (n > 1) by making multiple requests
+      for (let i = 0; i < n; i++) {
+        try {
+          // Create abort controller with 2-minute timeout
+          const abortController = new AbortController();
+          const timeoutId = setTimeout(() => abortController.abort(), 120000);
+
+          // Build generateText options
+          const generateOptions: any = {
+            model: providerInstance(model),
+            messages: messages.map(m => ({
+              role: m.role,
+              content: m.content,
+            })),
+            maxTokens: effectiveMaxTokens,
+            temperature,
+            abortSignal: abortController.signal,
+          };
+
+          // Add reasoning-specific options for OpenAI reasoning models
+          if (isReasoning) {
+            generateOptions.providerOptions = {
+              openai: {
+                reasoningEffort: 'low', // Use 'low' effort to balance speed and quality
+              }
+            };
+            debugLog(`Using reasoningEffort: 'low' for model ${model}`);
+          }
+
+          const result = await generateText(generateOptions);
+
+          clearTimeout(timeoutId);
+
+          // Extract text from result
+          debugLog(`AI SDK result text length: ${result.text?.length || 0}`);
+          debugLog(`AI SDK finish reason: ${result.finishReason}`);
+          debugLog(`AI SDK usage:`, JSON.stringify(result.usage));
+          
+          if (result.text && result.text.trim()) {
+            choices.push(result.text.trim());
+          } else {
+            debugLog(`WARNING: Empty response from AI SDK for model ${model}`);
+            
+            // If we got empty response from reasoning model, throw error to trigger fallback
+            if (isReasoning) {
+              throw new Error(`Empty response from reasoning model ${model}. The model may be using all tokens for internal reasoning. Try using reasoningEffort: 'minimal' or a non-reasoning model.`);
+            }
+          }
+
+          // Store raw result for metadata access
+          rawResult = {
+            ...result,
+            usage: result.usage,
+            finishReason: result.finishReason,
+            providerMetadata: result.providerMetadata,
+          };
+
+          // Log reasoning tokens if available (for GPT-5 models)
+          const reasoningTokens = (result as any).usage?.reasoningTokens;
+          if (reasoningTokens !== undefined) {
+            debugLog(`reasoning tokens: ${reasoningTokens}`);
+          }
+
+        } catch (error: any) {
+          // Better error messages from AI SDK
+          if (error.name === 'AbortError') {
+            throw new Error(`Request timeout after 120 seconds for model ${model}`);
+          }
+          
+          debugLog('AI SDK error:', error.message || error);
+          throw new Error(`${provider} error: ${error.message || String(error)}`);
         }
       }
-      return { choices, raw };
+
+      return { choices, raw: rawResult };
     },
 
     async embed(_text: string): Promise<number[]> {
+      // Embeddings not currently used in this application
       return [];
     },
-    async countTokens(_modelId: string, text: string): Promise<number> {
-      // Fallback rough estimate: ~4 chars per token
-      return Math.ceil([...text].length / 4);
+
+    async countTokens(modelId: string, text: string): Promise<number> {
+      try {
+        // Use AI SDK's built-in token counting
+        const model = providerInstance(modelId);
+        
+        // The AI SDK models have a countPromptTokens method
+        if (typeof (model as any).doCountTokens === 'function') {
+          const result = await (model as any).doCountTokens({ prompt: text });
+          return result;
+        }
+
+        // For OpenAI models, we can estimate using their tokenizer
+        // GPT models use roughly 4 characters per token
+        // This is a reasonable approximation for most models
+        const estimate = Math.ceil(text.length / 4);
+        debugLog(`token count estimate for ${modelId}: ${estimate} tokens`);
+        return estimate;
+        
+      } catch (error) {
+        // Fallback to character-based estimation
+        const estimate = Math.ceil(text.length / 4);
+        debugLog(`token count fallback for ${modelId}: ${estimate} tokens`);
+        return estimate;
+      }
     },
   };
 }

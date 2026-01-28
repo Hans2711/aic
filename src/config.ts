@@ -77,8 +77,8 @@ export function daemonEnabled(): boolean {
 }
 
 // Model defaults (parity with Go implementation)
-const openAISmall = "gpt-4o-mini";
-const openAILarge = "gpt-4o";
+const openAISmall = "gpt-5-nano";
+const openAILarge = "gpt-5-mini";
 const claudeSmall = "claude-haiku-3";
 const claudeLarge = "claude-sonnet-4-20250514";
 const geminiSmall = "gemini-2.5-flash";

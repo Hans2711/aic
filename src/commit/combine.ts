@@ -17,7 +17,7 @@ export async function generateCombinedSuggestions(cfg: CombineConfig, selected: 
 
   const system = "You synthesize multiple draft commit messages into improved, concise natural-language Git commit subjects. " +
     "Rules: write descriptive commit messages, imperative mood, no trailing period; no type prefixes or scopes. " +
-    "Prioritize clarity and meaningful detail; provide context when it adds value. " +
+    "Prioritize clarity and meaningful detail; describe what changed in specific terms. Do NOT include why changes were made or any rationale. " +
     "Identify the most impactful shared theme (largest scope, user-facing, architectural/security, or release-impacting) and prioritize that in the subject. " +
     "Produce distinct alternatives with different phrasing and emphasis (varied verbs, structures, focus). " +
     "If the message would exceed 80 characters, wrap ONLY between sentences; never break mid-sentence. If a sentence exceeds 80 characters, keep it on a single line. " +

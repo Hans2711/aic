@@ -2,3 +2,4 @@
 .gopath
 .gocache
 .aic.json
+node_modules
