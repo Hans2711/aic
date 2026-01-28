@@ -1,5 +1,5 @@
 import type { ProviderClient } from "../providers";
-import { debugLog } from "../debug";
+import { debugVerbose, debugInfo, debugMetric } from "../debug";
 import { estimateTokens, fingerprintText } from "./tokens";
 
 const chunkSummaryCache = new Map<string, string>();
@@ -40,7 +40,7 @@ export async function chunkFilesByBudget(
       cacheKey: fingerprintText(file, `${model}:diff-block`),
       label: "diff-block",
     });
-    debugLog(`file chunk candidate tokens=${tok}, length=${file.length}`);
+    debugVerbose("TOKEN", `file chunk candidate tokens=${tok}, length=${file.length}`);
     if (tok > budgetTokens) {
       const shrunk = shrinkDiffForSummarization(file, budgetTokens);
       if (shrunk.modified) {
@@ -50,7 +50,7 @@ export async function chunkFilesByBudget(
           cacheKey: fingerprintText(file, `${model}:diff-block-shrunk`),
           label: "diff-block-shrunk",
         });
-        debugLog(`shrunk large diff block; tokens≈${tok}, length=${file.length}`);
+        debugVerbose("CONTENT", `shrunk large diff block; tokens≈${tok}, length=${file.length}`);
       }
       if (tok > budgetTokens) {
         const stub = buildLargeDiffStubForSummaries(file);
@@ -60,7 +60,7 @@ export async function chunkFilesByBudget(
           cacheKey: fingerprintText(file, `${model}:diff-block-stub`),
           label: "diff-block-stub",
         });
-        debugLog(`replaced diff block with stub; tokens≈${tok}, length=${file.length}`);
+        debugVerbose("CONTENT", `replaced diff block with stub; tokens≈${tok}, length=${file.length}`);
       }
     }
     if (buf.length === 0) {
@@ -72,14 +72,14 @@ export async function chunkFilesByBudget(
       buf.push(file);
       curTokens += tok;
     } else {
-      debugLog(`closing chunk with tokens≈${curTokens}`);
+      debugVerbose("CONTENT", `closing chunk with tokens≈${curTokens}`);
       chunks.push(buf.join("\n"));
       buf = [file];
       curTokens = tok;
     }
   }
   if (buf.length) chunks.push(buf.join("\n"));
-  debugLog(`chunkFilesByBudget produced ${chunks.length} chunks (budget=${budgetTokens})`);
+  debugInfo("CONTENT", `chunkFilesByBudget produced ${chunks.length} chunks (budget=${budgetTokens})`);
   return chunks;
 }
 
@@ -88,8 +88,8 @@ export async function summarizeChunk(client: ProviderClient, model: string, chun
   const system =
     "You summarize git diffs by file. For each file (<=1 line), state the nature of change (add/remove/modify/rename) and highlight API changes, new/removed public functions, dependency/version changes, security-sensitive changes, and configuration updates. After the list, include a short 'Key Impacts:' section (<=3 lines). No commit messages, no speculation. Do not ask for more information; if parts of the diff are large or missing context, still produce the best possible summary from available headers and hunks.";
   const user = chunk;
-  debugLog("summarizeChunk: system prompt:", system);
-  debugLog("summarizeChunk: user chunk length=", String(chunk.length));
+  debugVerbose("SYSTEM", `summarizeChunk: system prompt: ${system}`);
+  debugVerbose("CONTENT", `summarizeChunk: user chunk length=${chunk.length}`);
   const resp = await client.chat({
     model,
     messages: [
@@ -134,7 +134,7 @@ async function summarizeChunksConcurrently(
         }
         const summary = await summarizeChunk(client, model, chunk);
         chunkSummaryCache.set(cacheKey, summary);
-        debugLog(`summarizeChunk worker(${label}) completed index=${current}`);
+        debugInfo("WORKER", `summarizeChunk worker(${label}) completed index=${current}`);
         results[current] = summary;
       }
     })()
@@ -158,7 +158,8 @@ export async function progressiveSummarizeDiff(
   concurrency: number
 ): Promise<string> {
   const files = splitDiffIntoFiles(diff);
-  debugLog(
+  debugInfo(
+    "CONTENT",
     `progressiveSummarizeDiff: files=${files.length}, chunkBudget=${chunkBudgetTokens}, targetBudget=${targetBudgetTokens}, concurrency=${concurrency}`
   );
   // First-level chunking
@@ -181,7 +182,7 @@ export async function progressiveSummarizeDiff(
     })) > targetBudgetTokens &&
     summaries.length > 1
   ) {
-    debugLog("combined summary over target budget; re-chunking for second-pass summarization");
+    debugInfo("CONTENT", "combined summary over target budget; re-chunking for second-pass summarization");
     // Re-group summaries by budget and summarize groups
     const groupChunks = await chunkFilesByBudget(
       client,
@@ -200,16 +201,12 @@ export async function progressiveSummarizeDiff(
     combined = summaries.join("\n\n");
     if (summaries.length === 1) break;
   }
-  debugLog(
-    "final combined summary tokens≈",
-    String(
-      await estimateTokens(client, model, combined, {
-        budgetTokens: targetBudgetTokens,
-        cacheKey: fingerprintText(combined, `${model}:combined-summary-final`),
-        label: "combined-summary-final",
-      })
-    )
-  );
+  const finalTokens = await estimateTokens(client, model, combined, {
+    budgetTokens: targetBudgetTokens,
+    cacheKey: fingerprintText(combined, `${model}:combined-summary-final`),
+    label: "combined-summary-final",
+  });
+  debugMetric("TOKEN", `final combined summary tokens≈${finalTokens}`);
   return combined;
 }
 

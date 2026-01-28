@@ -3,7 +3,7 @@ import { generateText } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { debugLog } from "../debug";
+import { debugInfo, debugWarn, debugMetric, debugVerbose, debugObject } from "../debug";
 
 export type ProviderName = "openai" | "claude" | "gemini" | "custom";
 export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
@@ -82,7 +82,7 @@ export function newProviderClient(provider: ProviderName, apiKey: string, baseUr
       let effectiveMaxTokens = maxTokens;
       if (isReasoning && (!maxTokens || maxTokens < 3000)) {
         effectiveMaxTokens = 4000; // Increased from 1500 to 4000
-        debugLog(`Reasoning model detected: ${model}, increasing maxTokens to ${effectiveMaxTokens}`);
+        debugInfo("MODEL", `Reasoning model detected: ${model}, increasing maxTokens to ${effectiveMaxTokens}`);
       }
 
       // Handle multiple completions (n > 1) by making multiple requests
@@ -111,7 +111,7 @@ export function newProviderClient(provider: ProviderName, apiKey: string, baseUr
                 reasoningEffort: "low", // Use 'low' effort to balance speed and quality
               },
             };
-            debugLog(`Using reasoningEffort: 'low' for model ${model}`);
+            debugVerbose("MODEL", `Using reasoningEffort: 'low' for model ${model}`);
           }
 
           const result = await generateText(generateOptions);
@@ -119,14 +119,14 @@ export function newProviderClient(provider: ProviderName, apiKey: string, baseUr
           clearTimeout(timeoutId);
 
           // Extract text from result
-          debugLog(`AI SDK result text length: ${result.text?.length || 0}`);
-          debugLog(`AI SDK finish reason: ${result.finishReason}`);
-          debugLog(`AI SDK usage:`, JSON.stringify(result.usage));
+          debugMetric("API", `AI SDK result text length: ${result.text?.length || 0}`, 2);
+          debugVerbose("API", `AI SDK finish reason: ${result.finishReason}`);
+          debugObject("API", "AI SDK usage", result.usage, 2);
 
           if (result.text && result.text.trim()) {
             choices.push(result.text.trim());
           } else {
-            debugLog(`WARNING: Empty response from AI SDK for model ${model}`);
+            debugWarn("API", `Empty response from AI SDK for model ${model}`);
 
             // If we got empty response from reasoning model, throw error to trigger fallback
             if (isReasoning) {
@@ -147,7 +147,7 @@ export function newProviderClient(provider: ProviderName, apiKey: string, baseUr
           // Log reasoning tokens if available (for GPT-5 models)
           const reasoningTokens = (result as any).usage?.reasoningTokens;
           if (reasoningTokens !== undefined) {
-            debugLog(`reasoning tokens: ${reasoningTokens}`);
+            debugMetric("TOKEN", `reasoning tokens: ${reasoningTokens}`);
           }
         } catch (error: any) {
           // Better error messages from AI SDK
@@ -155,7 +155,7 @@ export function newProviderClient(provider: ProviderName, apiKey: string, baseUr
             throw new Error(`Request timeout after 120 seconds for model ${model}`);
           }
 
-          debugLog("AI SDK error:", error.message || error);
+          debugWarn("API", `AI SDK error: ${error.message || error}`);
           throw new Error(`${provider} error: ${error.message || String(error)}`);
         }
       }
@@ -183,12 +183,12 @@ export function newProviderClient(provider: ProviderName, apiKey: string, baseUr
         // GPT models use roughly 4 characters per token
         // This is a reasonable approximation for most models
         const estimate = Math.ceil(text.length / 4);
-        debugLog(`token count estimate for ${modelId}: ${estimate} tokens`);
+        debugVerbose("TOKEN", `token count estimate for ${modelId}: ${estimate} tokens`);
         return estimate;
       } catch {
         // Fallback to character-based estimation
         const estimate = Math.ceil(text.length / 4);
-        debugLog(`token count fallback for ${modelId}: ${estimate} tokens`);
+        debugVerbose("TOKEN", `token count fallback for ${modelId}: ${estimate} tokens`);
         return estimate;
       }
     },

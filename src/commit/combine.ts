@@ -1,7 +1,7 @@
 import { getApiKeyForProvider, newProviderClient, type ProviderName } from "../providers";
 import { wrapCommitMessage } from "./wrap";
 import { stripLeadingListMarker } from "./listmarker";
-import { debugLog } from "../debug";
+import { debugVerbose } from "../debug";
 
 export type CombineConfig = {
   provider: ProviderName;
@@ -26,8 +26,8 @@ export async function generateCombinedSuggestions(cfg: CombineConfig, selected: 
     (cfg.systemAddition ? " Additional user instructions: " + cfg.systemAddition : "");
 
   const user = "Combine and refine these commit messages into consolidated alternatives:\n\n" + selected.join("\n");
-  debugLog("combine system prompt:", system);
-  debugLog("combine user content length=", String(user.length));
+  debugVerbose("SYSTEM", `combine system prompt: ${system}`);
+  debugVerbose("CONTENT", `combine user content length=${user.length}`);
 
   const temperature = 0.7;
   const maxTokens = 768;

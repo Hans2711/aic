@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { debugLog } from "./debug";
+import { debugInfo } from "./debug";
 import { DISPLAY_LIMITS } from "./constants";
 
 function run(
@@ -141,7 +141,7 @@ async function gh(...args: string[]): Promise<{ stdout: string; stderr: string; 
 async function prInfo(): Promise<{ title: string; issues: string[] }> {
   const res = await gh("pr", "view", "--json", "title,closingIssuesReferences");
   if (res.code !== 0) {
-    if (res.code === 127) debugLog("gh not found; skipping PR context");
+    if (res.code === 127) debugInfo("GIT", "gh not found; skipping PR context");
     return { title: "", issues: [] };
   }
   try {

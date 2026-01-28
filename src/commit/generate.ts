@@ -4,7 +4,7 @@ import { progressiveSummarizeDiff, splitDiffIntoFiles } from "./summarize";
 import { wrapCommitMessage } from "./wrap";
 import { stripLeadingListMarker } from "./listmarker";
 import { envBool, loadConfig, daemonEnabled, modelForTokens, Env, getIgnorePrefixes } from "../config";
-import { debugLog } from "../debug";
+import { debugInfo, debugWarn, debugError, debugSuccess, debugMetric, debugVerbose, debugSection } from "../debug";
 import { estimateTokens, fingerprintText } from "./tokens";
 import {
   DIFF_LIMITS,
@@ -39,7 +39,7 @@ async function generateSuggestionsParallel(
   let nextIndex = 0;
   let successfulCalls = 0;
 
-  debugLog(`generateSuggestionsParallel: target=${target}, concurrency=${workerCount}, model=${currentModel}`);
+  debugInfo("WORKER", `generateSuggestionsParallel: target=${target}, concurrency=${workerCount}, model=${currentModel}`);
 
   const workers = Array.from({ length: workerCount }, () =>
     (async () => {
@@ -61,7 +61,7 @@ async function generateSuggestionsParallel(
             if (!raw || !raw.trim()) {
               // Empty response - if it's a reasoning model, trigger fallback
               if (currentModel.includes("gpt-5") && !retriedWithFallback) {
-                debugLog(`Reasoning model ${currentModel} returned empty response, falling back to gpt-4o`);
+                debugWarn("MODEL", `Reasoning model ${currentModel} returned empty response, falling back to gpt-4o`);
                 currentModel = "gpt-4o";
                 retriedWithFallback = true;
                 nextIndex = suggestions.length; // Reset to retry from current position
@@ -75,7 +75,7 @@ async function generateSuggestionsParallel(
             if (cleaned && !seen.has(norm)) {
               seen.add(norm);
               suggestions.push(cleaned);
-              debugLog(`Generated suggestion ${suggestions.length}/${target}`);
+              debugSuccess("WORKER", `Generated suggestion ${suggestions.length}/${target}`);
             }
 
             if (suggestions.length >= target) {
@@ -83,11 +83,11 @@ async function generateSuggestionsParallel(
             }
           }
         } catch (error: any) {
-          debugLog(`API call failed: ${error.message}`);
+          debugError("API", `API call failed: ${error.message}`);
 
           // If reasoning model fails with empty responses and we haven't retried yet, fallback to gpt-4o
           if (!retriedWithFallback && currentModel.includes("gpt-5") && error.message.includes("empty response")) {
-            debugLog(`Reasoning model ${currentModel} failed with empty responses, falling back to gpt-4o`);
+            debugWarn("MODEL", `Reasoning model ${currentModel} failed with empty responses, falling back to gpt-4o`);
             currentModel = "gpt-4o";
             retriedWithFallback = true;
             nextIndex = suggestions.length; // Reset to retry from current position
@@ -105,7 +105,7 @@ async function generateSuggestionsParallel(
 
   await Promise.allSettled(workers);
 
-  debugLog(`generateSuggestionsParallel: generated ${suggestions.length} unique suggestions`);
+  debugSuccess("WORKER", `generateSuggestionsParallel: generated ${suggestions.length} unique suggestions`);
   return suggestions;
 }
 
@@ -126,12 +126,12 @@ export async function generateSuggestions(cfg: SuggestionConfig): Promise<string
   // Load the appropriate diff
   let diff = (await (daemonEnabled() ? worktreeDiff() : stagedDiff())).trim();
   if (!diff) throw new Error(daemonEnabled() ? "no changes compared to HEAD" : "no staged changes");
-  debugLog("diff length=", String(diff.length));
+  debugMetric("CONTENT", `diff length=${diff.length}`, 2);
 
   // Filter out build artifacts and ignored prefixes to improve relevance
   const { filtered, removedCount } = filterDiffByPrefixes(diff, getIgnorePrefixes());
   if (removedCount > 0) {
-    debugLog(`filtered out ${removedCount} file block(s) by prefix`);
+    debugInfo("CONTENT", `filtered out ${removedCount} file block(s) by prefix`);
     diff = filtered.trim() || diff;
   }
 
@@ -144,10 +144,10 @@ export async function generateSuggestions(cfg: SuggestionConfig): Promise<string
       cacheKey: fingerprintText(diff, `${cfg.model}:full-diff`),
       label: "full-diff-model-select",
     });
-    debugLog("diff tokens≈", String(diffTokens));
+    debugMetric("TOKEN", `diff tokens≈${diffTokens}`);
     chosenModel = modelForTokens(cfg.provider, diffTokens);
   }
-  debugLog("provider=", cfg.provider, "model=", chosenModel, forcedModel ? "(forced)" : "(auto)");
+  debugInfo("MODEL", `provider=${cfg.provider}, model=${chosenModel}${forcedModel ? " (forced)" : " (auto)"}`);
 
   // Choose summarization model and budgets
   const summarizeModel = chosenModel; // reuse current
@@ -161,7 +161,8 @@ export async function generateSuggestions(cfg: SuggestionConfig): Promise<string
     TOKEN_LIMITS.FINAL_BUDGET_TOKENS,
     cfg.summarizeConcurrency
   );
-  debugLog("===== SUMMARY START =====\n" + summary + "\n===== SUMMARY END =====");
+  debugSection("DIFF SUMMARY");
+  debugVerbose("CONTENT", summary);
   if (summary.length > TOKEN_LIMITS.MAX_SUMMARY_CHARS) {
     summary =
       summary.slice(0, TOKEN_LIMITS.MAX_SUMMARY_CHARS) +
@@ -226,8 +227,8 @@ export async function generateSuggestions(cfg: SuggestionConfig): Promise<string
   if (cfg.systemAddition) systemMsg += " Additional user instructions: " + cfg.systemAddition;
   const enforced = await enforceContextLimit(client, chosenModel, systemMsg, baseContext, rawDiffInfo.block);
   userContent = enforced.userContent;
-  if (enforced.note) debugLog(enforced.note);
-  debugLog("suggestions system prompt:", systemMsg);
+  if (enforced.note) debugInfo("CONTENT", enforced.note);
+  debugVerbose("SYSTEM", `suggestions system prompt: ${systemMsg}`);
 
   // Temperature and limits
   const maxTokens = chosenModel.includes("gpt-5")
@@ -238,7 +239,7 @@ export async function generateSuggestions(cfg: SuggestionConfig): Promise<string
     { role: "system" as const, content: systemMsg },
     { role: "user" as const, content: userContent },
   ];
-  debugLog("suggestions user content length=", String(userContent.length));
+  debugMetric("CONTENT", `suggestions user content length=${userContent.length}`, 2);
 
   const target = Math.max(1, cfg.suggestions);
 
@@ -514,7 +515,7 @@ async function enforceContextLimit(
     const noteSegment = attempt.note ? attempt.note + "\n\n" : "";
     const candidateContent = baseContent + noteSegment + (attempt.raw || "");
     if (candidateContent.length > TOKEN_LIMITS.MAX_CONTEXT_CHARS) {
-      debugLog(`context length ${candidateContent.length} chars exceeds soft cap ${TOKEN_LIMITS.MAX_CONTEXT_CHARS}`);
+      debugVerbose("CONTENT", `context length ${candidateContent.length} chars exceeds soft cap ${TOKEN_LIMITS.MAX_CONTEXT_CHARS}`);
       attemptIndex++;
       continue;
     }
@@ -527,10 +528,10 @@ async function enforceContextLimit(
     attemptIndex++;
     if (tokenEstimate <= TOKEN_LIMITS.MAX_CONTEXT_TOKENS) {
       if (attempt.note && attempt.raw) {
-        debugLog(`context trimmed: ${attempt.note}`);
+        debugInfo("CONTENT", `context trimmed: ${attempt.note}`);
       }
       if (attempt.note && !attempt.raw) {
-        debugLog("context trimmed: raw diff omitted due to size");
+        debugInfo("CONTENT", "context trimmed: raw diff omitted due to size");
       }
       return { userContent: candidateContent, note: attempt.note };
     }
@@ -664,7 +665,7 @@ function filterDiffByPrefixes(diff: string, prefixes: string[]): { filtered: str
       continue;
     }
     if (path && shouldSkipDiffBlock(path, block)) {
-      debugLog(`filtered diff block by heuristic: ${path}`);
+      debugVerbose("CONTENT", `filtered diff block by heuristic: ${path}`);
       removed++;
       continue;
     }

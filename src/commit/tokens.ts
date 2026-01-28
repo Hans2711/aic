@@ -1,6 +1,6 @@
 import { createHash } from "crypto";
 import type { ProviderClient } from "../providers";
-import { debugLog } from "../debug";
+import { debugWarn } from "../debug";
 
 const APPROX_CHARS_PER_TOKEN = 4;
 const DEFAULT_MARGIN = 0.85;
@@ -57,7 +57,7 @@ export async function estimateTokens(
       return counted;
     }
   } catch (err) {
-    debugLog("countTokens failed", label ? `${label}:` : "", String(err));
+    debugWarn("TOKEN", `countTokens failed${label ? ` ${label}` : ""}: ${String(err)}`);
   }
 
   tokenEstimateCache.set(cacheKey, approx);

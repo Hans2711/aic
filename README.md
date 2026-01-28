@@ -59,7 +59,14 @@ Provider selection:
 ## Mocking and debugging
 
 - `AIC_MOCK=1 bun run src/cli.ts` produces deterministic suggestions without calling any API.
-- `AIC_DEBUG=1` prints extra detail, including summary content and token estimates.
+- `AIC_DEBUG=1` prints basic debug information with colored, categorized output and timestamps.
+- `AIC_DEBUG=2` prints verbose debug information, including full content, system prompts, and detailed metrics.
+
+The debug output features:
+- Color-coded log levels (info, warnings, errors, success, metrics)
+- Categorized logging (API, TOKEN, MODEL, GIT, WORKER, CONTENT, SYSTEM)
+- Elapsed timestamps showing time since process start
+- Beautiful formatting with icons and structured output
 
 ## Development
 

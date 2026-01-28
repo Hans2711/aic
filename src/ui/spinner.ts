@@ -3,7 +3,7 @@ import { debugEnabled } from "../debug";
 
 export function spinner(message: string) {
   // In debug mode, avoid animation so logs remain readable
-  if (debugEnabled()) {
+  if (debugEnabled(1)) {
     // Print a static preface line to stderr for context
     process.stderr.write(`${Color.dim}${message}${Color.reset}\n`);
     return (ok: boolean) => {

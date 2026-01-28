@@ -251,7 +251,7 @@ export function helpEnvRowsCore(): Array<[string, string]> {
     [Env.AIC_COMBINE_PROVIDER, "(optional) Provider for combine step [default: AIC_PROVIDER]"],
     [Env.AIC_COMBINE_MODEL, "(optional) Model for combine step"],
     [Env.AIC_COMBINE_SUGGESTIONS, "(optional) Suggestions count for combine [default: AIC_SUGGESTIONS]"],
-    [Env.AIC_DEBUG, "(optional) Set to 1 for raw response debug"],
+    [Env.AIC_DEBUG, "(optional) Debug level: 1=basic info, 2=verbose details [default: 0/off]"],
     [Env.AIC_MOCK, "(optional) 1 for mock suggestions (no API call)"],
     [Env.AIC_NON_INTERACTIVE, "(optional) 1 to auto-select first suggestion & skip commit"],
     [Env.AIC_AUTO_COMMIT, "(optional) With NON_INTERACTIVE, also perform the commit"],
