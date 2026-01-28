@@ -1,4 +1,5 @@
-export type ProviderName = "openai" | "claude" | "gemini" | "custom";
+import type { ProviderName } from "./providers/index";
+import { TOKEN_LIMITS, GENERATION_CONFIG, DEFAULT_IGNORE_PREFIXES } from "./constants";
 
 // Env keys
 export const Env = {
@@ -55,12 +56,27 @@ export function envIntInRange(key: string, def: number, min: number, max: number
 
 export function warnUnknownAICEnv() {
   const known = new Set<string>([
-    Env.AIC_MODEL, Env.AIC_MODEL_SMALL, Env.AIC_MODEL_LARGE, Env.AIC_SUGGESTIONS,
-    Env.AIC_MOCK, Env.AIC_DEBUG, Env.AIC_NON_INTERACTIVE, Env.AIC_AUTO_COMMIT, Env.AIC_NO_COLOR,
-    Env.AIC_DAEMON, Env.AIC_DEAMON_ALIAS,
-    Env.AIC_PROVIDER, Env.AIC_COMBINE_PROVIDER, Env.AIC_COMBINE_MODEL, Env.AIC_COMBINE_SUGGESTIONS,
-    Env.CUSTOM_BASE_URL, Env.CUSTOM_CHAT_COMPLETIONS_PATH, Env.CUSTOM_API_KEY,
-    Env.AIC_IGNORE_PREFIXES, Env.AIC_SUMMARIZE_CONCURRENCY, Env.AIC_SUGGESTION_CONCURRENCY,
+    Env.AIC_MODEL,
+    Env.AIC_MODEL_SMALL,
+    Env.AIC_MODEL_LARGE,
+    Env.AIC_SUGGESTIONS,
+    Env.AIC_MOCK,
+    Env.AIC_DEBUG,
+    Env.AIC_NON_INTERACTIVE,
+    Env.AIC_AUTO_COMMIT,
+    Env.AIC_NO_COLOR,
+    Env.AIC_DAEMON,
+    Env.AIC_DEAMON_ALIAS,
+    Env.AIC_PROVIDER,
+    Env.AIC_COMBINE_PROVIDER,
+    Env.AIC_COMBINE_MODEL,
+    Env.AIC_COMBINE_SUGGESTIONS,
+    Env.CUSTOM_BASE_URL,
+    Env.CUSTOM_CHAT_COMPLETIONS_PATH,
+    Env.CUSTOM_API_KEY,
+    Env.AIC_IGNORE_PREFIXES,
+    Env.AIC_SUMMARIZE_CONCURRENCY,
+    Env.AIC_SUGGESTION_CONCURRENCY,
   ]);
   let headerPrinted = false;
   for (const [k] of Object.entries(process.env)) {
@@ -90,10 +106,13 @@ export function smallModelFor(provider: ProviderName): string {
   const v = getEnv(Env.AIC_MODEL_SMALL).trim();
   if (v) return v;
   switch (provider) {
-    case "claude": return claudeSmall;
-    case "gemini": return geminiSmall;
+    case "claude":
+      return claudeSmall;
+    case "gemini":
+      return geminiSmall;
     case "custom":
-    default: return openAISmall;
+    default:
+      return openAISmall;
   }
 }
 
@@ -101,10 +120,13 @@ export function largeModelFor(provider: ProviderName): string {
   const v = getEnv(Env.AIC_MODEL_LARGE).trim();
   if (v) return v;
   switch (provider) {
-    case "claude": return claudeLarge;
-    case "gemini": return geminiLarge;
+    case "claude":
+      return claudeLarge;
+    case "gemini":
+      return geminiLarge;
     case "custom":
-    default: return openAILarge;
+    default:
+      return openAILarge;
   }
 }
 
@@ -117,7 +139,7 @@ export function defaultCombineModelFor(provider: ProviderName): string {
 }
 
 export function modelForTokens(provider: ProviderName, tokens: number): string {
-  if (tokens < 2000) return smallModelFor(provider);
+  if (tokens < TOKEN_LIMITS.SMALL_MODEL_THRESHOLD) return smallModelFor(provider);
   return largeModelFor(provider);
 }
 
@@ -132,7 +154,7 @@ export type RuntimeConfig = {
 
 export function autodetectProvider(): ProviderName {
   const forced = getEnv(Env.AIC_PROVIDER).trim().toLowerCase() as ProviderName | "";
-  if (forced) return forced as ProviderName;
+  if (forced) return forced;
   const hasOpenAI = !!getEnv(Env.OPENAI_API_KEY).trim();
   const hasClaude = !!getEnv(Env.CLAUDE_API_KEY).trim();
   const hasGemini = !!getEnv(Env.GEMINI_API_KEY).trim();
@@ -143,15 +165,39 @@ export function autodetectProvider(): ProviderName {
 }
 
 export function loadConfig(systemAddition = ""): RuntimeConfig {
-  let provider = autodetectProvider();
+  const provider = autodetectProvider();
   let model = defaultModelFor(provider);
-  const suggestionsDefault = envBool(Env.AIC_NON_INTERACTIVE) ? 1 : 5;
-  let suggestions = envIntInRange(Env.AIC_SUGGESTIONS, suggestionsDefault, 1, 10);
+  const suggestionsDefault = envBool(Env.AIC_NON_INTERACTIVE)
+    ? GENERATION_CONFIG.DEFAULT_SUGGESTIONS_CI
+    : GENERATION_CONFIG.DEFAULT_SUGGESTIONS;
+  const suggestions = envIntInRange(
+    Env.AIC_SUGGESTIONS,
+    suggestionsDefault,
+    GENERATION_CONFIG.SUGGESTIONS_MIN,
+    GENERATION_CONFIG.SUGGESTIONS_MAX
+  );
   const userModel = getEnv(Env.AIC_MODEL).trim();
   if (userModel) model = userModel;
-  const summarizeConcurrency = envIntInRange(Env.AIC_SUMMARIZE_CONCURRENCY, 10, 1, 20);
-  const suggestionConcurrency = envIntInRange(Env.AIC_SUGGESTION_CONCURRENCY, 10, 1, 20);
-  return { provider, model, suggestions, systemAddition: systemAddition.trim(), summarizeConcurrency, suggestionConcurrency };
+  const summarizeConcurrency = envIntInRange(
+    Env.AIC_SUMMARIZE_CONCURRENCY,
+    GENERATION_CONFIG.DEFAULT_SUMMARIZE_CONCURRENCY,
+    GENERATION_CONFIG.CONCURRENCY_MIN,
+    GENERATION_CONFIG.CONCURRENCY_MAX
+  );
+  const suggestionConcurrency = envIntInRange(
+    Env.AIC_SUGGESTION_CONCURRENCY,
+    GENERATION_CONFIG.DEFAULT_SUGGESTION_CONCURRENCY,
+    GENERATION_CONFIG.CONCURRENCY_MIN,
+    GENERATION_CONFIG.CONCURRENCY_MAX
+  );
+  return {
+    provider,
+    model,
+    suggestions,
+    systemAddition: systemAddition.trim(),
+    summarizeConcurrency,
+    suggestionConcurrency,
+  };
 }
 
 export function loadCombineConfig(systemAddition = ""): RuntimeConfig {
@@ -159,7 +205,7 @@ export function loadCombineConfig(systemAddition = ""): RuntimeConfig {
   const base = loadConfig(systemAddition);
   let provider = base.provider;
   const ovProvider = getEnv(Env.AIC_COMBINE_PROVIDER).trim().toLowerCase() as ProviderName | "";
-  if (ovProvider) provider = ovProvider as ProviderName;
+  if (ovProvider) provider = ovProvider;
 
   // Determine model for combine step
   const combineModel = getEnv(Env.AIC_COMBINE_MODEL).trim();
@@ -175,8 +221,20 @@ export function loadCombineConfig(systemAddition = ""): RuntimeConfig {
   }
 
   // Suggestions override for combine
-  const suggestions = envIntInRange(Env.AIC_COMBINE_SUGGESTIONS, base.suggestions, 1, 10);
-  return { provider, model, suggestions, systemAddition: base.systemAddition, summarizeConcurrency: base.summarizeConcurrency, suggestionConcurrency: base.suggestionConcurrency };
+  const suggestions = envIntInRange(
+    Env.AIC_COMBINE_SUGGESTIONS,
+    base.suggestions,
+    GENERATION_CONFIG.SUGGESTIONS_MIN,
+    GENERATION_CONFIG.SUGGESTIONS_MAX
+  );
+  return {
+    provider,
+    model,
+    suggestions,
+    systemAddition: base.systemAddition,
+    summarizeConcurrency: base.summarizeConcurrency,
+    suggestionConcurrency: base.suggestionConcurrency,
+  };
 }
 
 export function helpEnvRowsCore(): Array<[string, string]> {
@@ -200,7 +258,10 @@ export function helpEnvRowsCore(): Array<[string, string]> {
     [Env.AIC_NO_COLOR, "(optional) Disable colored output (same as --no-color)"],
     [Env.AIC_DAEMON, "(optional) Daemon mode: minimal output; use worktree diff"],
     [Env.AIC_DEAMON_ALIAS, "(alias) Legacy spelling; same as AIC_DAEMON"],
-    [Env.AIC_IGNORE_PREFIXES, "(optional) Ignore path prefixes in diffs (comma-separated; default: dist/,node_modules/,build/,out/,coverage/,target/,.next/,.turbo/)"],
+    [
+      Env.AIC_IGNORE_PREFIXES,
+      "(optional) Ignore path prefixes in diffs (comma-separated; default: dist/,node_modules/,build/,out/,coverage/,target/,.next/,.turbo/)",
+    ],
     [Env.AIC_SUMMARIZE_CONCURRENCY, "(optional) Concurrent API calls for diff summarization (1-20; default: 10)"],
     [Env.AIC_SUGGESTION_CONCURRENCY, "(optional) Concurrent API calls for suggestion generation (1-20; default: 10)"],
     [Env.NO_COLOR, "(optional) Standard flag to disable colors"],
@@ -211,9 +272,11 @@ export function helpEnvRowsCore(): Array<[string, string]> {
 
 export function getIgnorePrefixes(): string[] {
   const raw = getEnv(Env.AIC_IGNORE_PREFIXES).trim();
-  const defaults = ["dist/", "node_modules/", "build/", "out/", "coverage/", "target/", ".next/", ".turbo/"];
-  if (!raw) return defaults;
-  return raw.split(",").map((s) => s.trim()).filter(Boolean);
+  if (!raw) return [...DEFAULT_IGNORE_PREFIXES];
+  return raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
 }
 
 export function helpEnvRowsCustom(): Array<[string, string]> {

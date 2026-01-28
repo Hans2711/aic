@@ -29,7 +29,7 @@ export async function estimateTokens(
   client: ProviderClient | undefined,
   model: string,
   text: string,
-  options: TokenEstimateOptions = {},
+  options: TokenEstimateOptions = {}
 ): Promise<number> {
   const approx = approximateTokens(text);
   const { budgetTokens, margin = DEFAULT_MARGIN, cacheKey = fingerprintText(text, model), label } = options;

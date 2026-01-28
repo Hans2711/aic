@@ -15,7 +15,9 @@ export async function selectInteractive(opts: SelectOptions): Promise<string> {
     for (let i = 0; i < items.length; i++) {
       process.stdout.write(`  ${Color.yellow}[${i + 1}]${Color.reset} ${Color.cyan}${items[i]}${Color.reset}\n`);
     }
-    process.stdout.write(`\n${Color.bold}Select [1-${items.length}]${Color.reset} ${Color.dim}[default: 1]${Color.reset}: ${Color.cyan}`);
+    process.stdout.write(
+      `\n${Color.bold}Select [1-${items.length}]${Color.reset} ${Color.dim}[default: 1]${Color.reset}: ${Color.cyan}`
+    );
     const choice = await readLine();
     const n = choice.trim() === "" ? 1 : Math.min(Math.max(parseInt(choice, 10) || 1, 1), items.length);
     process.stdout.write(Color.reset);
@@ -124,7 +126,10 @@ async function rawModeSelect(title: string, items: string[]): Promise<string> {
       }
       // Re-render in place
       moveUp(backLines);
-      for (let i = 0; i < backLines; i++) { clearLine(); if (i < backLines - 1) process.stdout.write("\n"); }
+      for (let i = 0; i < backLines; i++) {
+        clearLine();
+        if (i < backLines - 1) process.stdout.write("\n");
+      }
       moveUp(backLines - 1);
       backLines = render();
     };

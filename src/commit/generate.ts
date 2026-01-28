@@ -6,44 +6,17 @@ import { stripLeadingListMarker } from "./listmarker";
 import { envBool, loadConfig, daemonEnabled, modelForTokens, Env, getIgnorePrefixes } from "../config";
 import { debugLog } from "../debug";
 import { estimateTokens, fingerprintText } from "./tokens";
+import {
+  DIFF_LIMITS,
+  GENERATION_CONFIG,
+  TOKEN_LIMITS,
+  NON_SOURCE_DIR_PREFIXES,
+  NON_SOURCE_EXTENSIONS,
+  DISPLAY_LIMITS,
+  TRUNCATION_TARGETS,
+} from "../constants";
 
 export type SuggestionConfig = ReturnType<typeof loadConfig> & { provider: ProviderName };
-
-const NON_SOURCE_DIR_PREFIXES = [
-  "dist/",
-  "bin/",
-  "build/",
-  "out/",
-  "coverage/",
-  "node_modules/",
-  "vendor/",
-  "tmp/",
-  "temp/",
-];
-
-const NON_SOURCE_EXTENSIONS = [
-  ".txt",
-  ".log",
-  ".csv",
-  ".tsv",
-  ".lock",
-  ".patch",
-  ".ico",
-  ".png",
-  ".jpg",
-  ".jpeg",
-  ".gif",
-  ".mp4",
-  ".mp3",
-  ".zip",
-  ".tar",
-  ".gz",
-  ".tgz",
-  ".xz",
-  ".7z",
-];
-
-const MAX_NON_SOURCE_BLOCK_CHARS = 120_000;
 
 // Helper function to generate suggestions in parallel with controlled concurrency
 async function generateSuggestionsParallel(
@@ -59,43 +32,44 @@ async function generateSuggestionsParallel(
   const seen = new Set<string>();
   let currentModel = model;
   let retriedWithFallback = false;
-  
+
   // Worker pool pattern: limit concurrent API calls
   const workerCount = Math.min(concurrency, target);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   let nextIndex = 0;
   let successfulCalls = 0;
-  
+
   debugLog(`generateSuggestionsParallel: target=${target}, concurrency=${workerCount}, model=${currentModel}`);
-  
+
   const workers = Array.from({ length: workerCount }, () =>
     (async () => {
       while (suggestions.length < target && successfulCalls < target * 3) {
-        const current = nextIndex++;
-        
+        nextIndex++;
+
         try {
-          const resp = await client.chat({ 
-            model: currentModel, 
-            messages, 
-            maxTokens, 
-            temperature, 
-            n: 1 
+          const resp = await client.chat({
+            model: currentModel,
+            messages,
+            maxTokens,
+            temperature,
+            n: 1,
           });
-          
+
           successfulCalls++;
-          
+
           for (const raw of resp.choices) {
             if (!raw || !raw.trim()) {
               // Empty response - if it's a reasoning model, trigger fallback
-              if (currentModel.includes('gpt-5') && !retriedWithFallback) {
+              if (currentModel.includes("gpt-5") && !retriedWithFallback) {
                 debugLog(`Reasoning model ${currentModel} returned empty response, falling back to gpt-4o`);
-                currentModel = 'gpt-4o';
+                currentModel = "gpt-4o";
                 retriedWithFallback = true;
                 nextIndex = suggestions.length; // Reset to retry from current position
                 return; // Exit this worker, others will continue with new model
               }
               continue;
             }
-            
+
             const cleaned = postProcess(raw);
             const norm = cleaned.toLowerCase();
             if (cleaned && !seen.has(norm)) {
@@ -103,23 +77,23 @@ async function generateSuggestionsParallel(
               suggestions.push(cleaned);
               debugLog(`Generated suggestion ${suggestions.length}/${target}`);
             }
-            
+
             if (suggestions.length >= target) {
               return; // Target reached, exit worker
             }
           }
         } catch (error: any) {
           debugLog(`API call failed: ${error.message}`);
-          
+
           // If reasoning model fails with empty responses and we haven't retried yet, fallback to gpt-4o
-          if (!retriedWithFallback && currentModel.includes('gpt-5') && error.message.includes('empty response')) {
+          if (!retriedWithFallback && currentModel.includes("gpt-5") && error.message.includes("empty response")) {
             debugLog(`Reasoning model ${currentModel} failed with empty responses, falling back to gpt-4o`);
-            currentModel = 'gpt-4o';
+            currentModel = "gpt-4o";
             retriedWithFallback = true;
             nextIndex = suggestions.length; // Reset to retry from current position
             return; // Exit this worker
           }
-          
+
           // For other errors, continue trying with remaining attempts
           if (successfulCalls >= target * 3) {
             throw error; // Give up after too many attempts
@@ -128,9 +102,9 @@ async function generateSuggestionsParallel(
       }
     })()
   );
-  
+
   await Promise.allSettled(workers);
-  
+
   debugLog(`generateSuggestionsParallel: generated ${suggestions.length} unique suggestions`);
   return suggestions;
 }
@@ -166,7 +140,7 @@ export async function generateSuggestions(cfg: SuggestionConfig): Promise<string
   let chosenModel = cfg.model;
   if (!forcedModel) {
     const diffTokens = await estimateTokens(client, cfg.model, diff, {
-      budgetTokens: 120_000,
+      budgetTokens: TOKEN_LIMITS.MAX_CONTEXT_TOKENS,
       cacheKey: fingerprintText(diff, `${cfg.model}:full-diff`),
       label: "full-diff-model-select",
     });
@@ -177,15 +151,21 @@ export async function generateSuggestions(cfg: SuggestionConfig): Promise<string
 
   // Choose summarization model and budgets
   const summarizeModel = chosenModel; // reuse current
-  const chunkBudget = 6000; // tokens per chunk input (safe default)
-  const finalBudget = 12000; // tokens for final combined summary fed into generation
 
   // Summarize entire diff progressively without truncation
-  let summary = await progressiveSummarizeDiff(client, summarizeModel, diff, chunkBudget, finalBudget, cfg.summarizeConcurrency);
+  let summary = await progressiveSummarizeDiff(
+    client,
+    summarizeModel,
+    diff,
+    TOKEN_LIMITS.CHUNK_BUDGET_TOKENS,
+    TOKEN_LIMITS.FINAL_BUDGET_TOKENS,
+    cfg.summarizeConcurrency
+  );
   debugLog("===== SUMMARY START =====\n" + summary + "\n===== SUMMARY END =====");
-  const MAX_SUMMARY_CHARS = 6000;
-  if (summary.length > MAX_SUMMARY_CHARS) {
-    summary = summary.slice(0, MAX_SUMMARY_CHARS) + "\n... (summary truncated due to size, relying on key highlights) ...";
+  if (summary.length > TOKEN_LIMITS.MAX_SUMMARY_CHARS) {
+    summary =
+      summary.slice(0, TOKEN_LIMITS.MAX_SUMMARY_CHARS) +
+      "\n... (summary truncated due to size, relying on key highlights) ...";
   }
 
   // Compose messages: include FILE LIST, DIFF SUMMARY, and RAW DIFF
@@ -193,21 +173,28 @@ export async function generateSuggestions(cfg: SuggestionConfig): Promise<string
   let userContent = "";
   if (ctx) userContent += ctx + "\n\n";
   const impact = analyzeDiffImpact(diff);
-  const filesList = extractFileList(diff).slice(0, 100);
-  const highlights = extractHighlights(summary).slice(0, 10);
-  const structuredHighlights = formatStructuredHighlights(highlights, impact).slice(0, 10);
+  const filesList = extractFileList(diff).slice(0, DISPLAY_LIMITS.MAX_FILES_DISPLAY);
+  const highlights = extractHighlights(summary).slice(0, DISPLAY_LIMITS.MAX_HIGHLIGHTS);
+  const structuredHighlights = formatStructuredHighlights(highlights, impact).slice(0, DISPLAY_LIMITS.MAX_HIGHLIGHTS);
   if (filesList.length) {
     userContent += "FILES CHANGED (paths):\n" + filesList.map((f) => `- ${f}`).join("\n") + "\n\n";
   }
   if (impact.topFiles.length) {
-    userContent += "IMPACT CANDIDATES:\n" + impact.topFiles.map((info) => `- ${info.path} (${info.area}) — +${info.additions}/-${info.deletions} lines`).join("\n") + "\n\n";
+    userContent +=
+      "IMPACT CANDIDATES:\n" +
+      impact.topFiles
+        .map((info) => `- ${info.path} (${info.area}) — +${info.additions}/-${info.deletions} lines`)
+        .join("\n") +
+      "\n\n";
   }
   if (impact.areaSummaries.length) {
-    const areaLines = impact.areaSummaries.slice(0, 5).map((a) => `- ${a.area}: ${a.totalChanges} line changes across ${a.fileCount} file(s)`);
+    const areaLines = impact.areaSummaries
+      .slice(0, DISPLAY_LIMITS.MAX_AREA_SUMMARIES)
+      .map((a) => `- ${a.area}: ${a.totalChanges} line changes across ${a.fileCount} file(s)`);
     userContent += "AREA OVERVIEW:\n" + areaLines.join("\n") + "\n\n";
   }
   if (impact.testFiles.length) {
-    const tests = impact.testFiles.slice(0, 10).map((f) => `- ${f}`);
+    const tests = impact.testFiles.slice(0, DISPLAY_LIMITS.MAX_TEST_FILES).map((f) => `- ${f}`);
     userContent += "TEST FILES CHANGED:\n" + tests.join("\n") + "\n\n";
   }
   if (structuredHighlights.length) {
@@ -223,7 +210,8 @@ export async function generateSuggestions(cfg: SuggestionConfig): Promise<string
   const baseContext = baseUserContent + (rawDiffInfo.note ? rawDiffInfo.note + "\n\n" : "");
   userContent = baseContext + rawDiffInfo.block;
 
-  let systemMsg = "You write detailed, descriptive Git commit subjects that provide clear context about the changes. " +
+  let systemMsg =
+    "You write detailed, descriptive Git commit subjects that provide clear context about the changes. " +
     "Rules: write messages with meaningful detail, imperative mood, no trailing period; " +
     "Do NOT use type prefixes or scopes (no 'feat:' or 'feat(scope):'). " +
     "Describe only what changed in clear, specific terms. Do NOT include why the change was made. " +
@@ -242,8 +230,9 @@ export async function generateSuggestions(cfg: SuggestionConfig): Promise<string
   debugLog("suggestions system prompt:", systemMsg);
 
   // Temperature and limits
-  const temperature = 0.6; // encourage diversity
-  const maxTokens = chosenModel.includes('gpt-5') ? 1500 : 768;   // reasoning models need more tokens
+  const maxTokens = chosenModel.includes("gpt-5")
+    ? GENERATION_CONFIG.MAX_TOKENS_REASONING
+    : GENERATION_CONFIG.MAX_TOKENS_STANDARD;
 
   const messages = [
     { role: "system" as const, content: systemMsg },
@@ -259,18 +248,18 @@ export async function generateSuggestions(cfg: SuggestionConfig): Promise<string
     chosenModel,
     messages,
     maxTokens,
-    temperature,
+    GENERATION_CONFIG.SUGGESTION_TEMPERATURE,
     target,
     cfg.suggestionConcurrency
   );
-  
+
   if (suggestions.length === 0) throw new Error("empty suggestions");
   // Ensure exactly target count
   return suggestions.slice(0, target);
 }
 
 function postProcess(text: string): string {
-  let msg = (text || "").trim();
+  const msg = (text || "").trim();
   if (!msg) return "";
   const lines = msg.includes("\n") ? msg.split("\n").map((l) => l.trim()) : [msg];
   const out: string[] = [];
@@ -281,8 +270,12 @@ function postProcess(text: string): string {
     if (wrapped) out.push(wrapped);
   }
   if (!out.length) return "";
-  const flattened = out.join("\n").split("\n").map((ln) => ln.trim()).filter(Boolean);
-  return flattened.slice(0, 2).join("\n");
+  const flattened = out
+    .join("\n")
+    .split("\n")
+    .map((ln) => ln.trim())
+    .filter(Boolean);
+  return flattened.slice(0, DISPLAY_LIMITS.MAX_COMMIT_MESSAGE_LINES).join("\n");
 }
 
 type ImpactFileInfo = {
@@ -362,7 +355,8 @@ function formatStructuredHighlights(highlights: string[], impact: ImpactAnalysis
     const cleaned = collapseWhitespace(raw);
     if (!cleaned) continue;
     const { change, rationale } = splitHighlightChange(cleaned);
-    const inferredArea = inferAreaFromHighlight(cleaned, impact) ?? inferAreaFromHighlight(change, impact) ?? inferAreaFallback(impact);
+    const inferredArea =
+      inferAreaFromHighlight(cleaned, impact) ?? inferAreaFromHighlight(change, impact) ?? inferAreaFallback(impact);
     const parts = [`Area: ${inferredArea}`];
     parts.push(`Change: ${capitalizeSentence(change)}`);
     if (rationale) parts.push(`Rationale: ${capitalizeSentence(rationale)}`);
@@ -474,10 +468,10 @@ function buildKeywords(path: string, area: string, basename: string): string[] {
   if (lowerArea) set.add(lowerArea);
   for (const segment of path.split("/")) {
     const clean = segment.replace(/\.[^/.]+$/, "").toLowerCase();
-    if (clean && clean.length >= 3) set.add(clean);
+    if (clean && clean.length >= DISPLAY_LIMITS.MIN_KEYWORD_LENGTH) set.add(clean);
   }
   const baseClean = basename.replace(/\.[^/.]+$/, "").toLowerCase();
-  if (baseClean && baseClean.length >= 3) set.add(baseClean);
+  if (baseClean && baseClean.length >= DISPLAY_LIMITS.MIN_KEYWORD_LENGTH) set.add(baseClean);
   return Array.from(set);
 }
 
@@ -490,10 +484,8 @@ async function enforceContextLimit(
   model: string,
   systemMsg: string,
   baseContent: string,
-  rawDiffBlock: string,
+  rawDiffBlock: string
 ): Promise<{ userContent: string; note?: string }> {
-  const MAX_CONTEXT_TOKENS = 90_000;
-  const MAX_CONTEXT_CHARS = 280_000;
   const attempts: Array<{ raw: string; note?: string }> = [];
   const seen = new Set<string>();
 
@@ -503,8 +495,7 @@ async function enforceContextLimit(
     seen.add(initialKey);
   }
 
-  const truncationTargets = [600, 400, 200];
-  for (const maxLines of truncationTargets) {
+  for (const maxLines of TRUNCATION_TARGETS.LINE_LIMITS) {
     const truncated = truncateRawDiffBlock(rawDiffBlock, maxLines);
     if (!truncated.truncated) continue;
     if (seen.has(truncated.block)) continue;
@@ -522,19 +513,19 @@ async function enforceContextLimit(
   for (const attempt of attempts) {
     const noteSegment = attempt.note ? attempt.note + "\n\n" : "";
     const candidateContent = baseContent + noteSegment + (attempt.raw || "");
-    if (candidateContent.length > MAX_CONTEXT_CHARS) {
-      debugLog(`context length ${candidateContent.length} chars exceeds soft cap ${MAX_CONTEXT_CHARS}`);
+    if (candidateContent.length > TOKEN_LIMITS.MAX_CONTEXT_CHARS) {
+      debugLog(`context length ${candidateContent.length} chars exceeds soft cap ${TOKEN_LIMITS.MAX_CONTEXT_CHARS}`);
       attemptIndex++;
       continue;
     }
     const combined = `SYSTEM:\n${systemMsg}\nUSER:\n${candidateContent}`;
     const tokenEstimate = await estimateTokens(client, model, combined, {
-      budgetTokens: MAX_CONTEXT_TOKENS,
+      budgetTokens: TOKEN_LIMITS.MAX_CONTEXT_TOKENS,
       cacheKey: fingerprintText(combined, `${model}:context-${attemptIndex}`),
       label: "context-candidate",
     });
     attemptIndex++;
-    if (tokenEstimate <= MAX_CONTEXT_TOKENS) {
+    if (tokenEstimate <= TOKEN_LIMITS.MAX_CONTEXT_TOKENS) {
       if (attempt.note && attempt.raw) {
         debugLog(`context trimmed: ${attempt.note}`);
       }
@@ -549,29 +540,25 @@ async function enforceContextLimit(
 }
 
 function buildRawDiffBlock(diff: string): { block: string; note?: string } {
-  const RAW_DIFF_OMIT_LINE_THRESHOLD = 800;
-  const RAW_DIFF_OMIT_CHAR_THRESHOLD = 160_000;
-  const RAW_DIFF_HARD_CAP = 300; // total diff lines (excluding header/footer) allowed before truncation
-  const RAW_DIFF_CHAR_CAP = 80_000; // approx character cap for raw diff block
   let note: string | undefined;
   const lineCount = diff ? diff.split(/\r?\n/).length : 0;
   const charCount = diff.length;
-  if (lineCount > RAW_DIFF_OMIT_LINE_THRESHOLD || charCount > RAW_DIFF_OMIT_CHAR_THRESHOLD) {
+  if (lineCount > DIFF_LIMITS.RAW_DIFF_OMIT_LINE_THRESHOLD || charCount > DIFF_LIMITS.RAW_DIFF_OMIT_CHAR_THRESHOLD) {
     const omitNote = `NOTE: RAW DIFF omitted due to size (${lineCount} lines, ${charCount} characters); rely on structured context above.`;
     return { block: "", note: omitNote };
   }
   const raw = "--- BEGIN RAW DIFF ---\n" + diff + "\n--- END RAW DIFF ---";
   let block = raw;
-  if (lineCount > RAW_DIFF_HARD_CAP) {
-    const truncated = truncateRawDiffBlock(raw, RAW_DIFF_HARD_CAP + 2);
+  if (lineCount > DIFF_LIMITS.RAW_DIFF_HARD_CAP_LINES) {
+    const truncated = truncateRawDiffBlock(raw, DIFF_LIMITS.RAW_DIFF_HARD_CAP_LINES + 2);
     block = truncated.block;
     const lineNote = `NOTE: RAW DIFF truncated to first ${truncated.headLines} and last ${truncated.tailLines} lines (of ${lineCount}) to stay within context.`;
     note = lineNote;
   }
-  const charResult = truncateRawDiffByChars(block, RAW_DIFF_CHAR_CAP);
+  const charResult = truncateRawDiffByChars(block, DIFF_LIMITS.RAW_DIFF_CHAR_CAP);
   if (charResult.truncated) {
     block = charResult.block;
-    const charNote = `NOTE: RAW DIFF truncated to ~${RAW_DIFF_CHAR_CAP} characters (from ${charResult.originalLength}) to stay within context.`;
+    const charNote = `NOTE: RAW DIFF truncated to ~${DIFF_LIMITS.RAW_DIFF_CHAR_CAP} characters (from ${charResult.originalLength}) to stay within context.`;
     note = note ? `${note}\n${charNote}` : charNote;
   }
   return { block, note };
@@ -579,7 +566,7 @@ function buildRawDiffBlock(diff: string): { block: string; note?: string } {
 
 function truncateRawDiffBlock(
   rawBlock: string,
-  maxLines: number,
+  maxLines: number
 ): { block: string; truncated: boolean; headLines: number; tailLines: number } {
   if (!rawBlock) return { block: "", truncated: false, headLines: 0, tailLines: 0 };
   const lines = rawBlock.split(/\r?\n/);
@@ -602,7 +589,7 @@ function truncateRawDiffBlock(
 
 function truncateRawDiffByChars(
   rawBlock: string,
-  charLimit: number,
+  charLimit: number
 ): { block: string; truncated: boolean; originalLength: number } {
   if (!rawBlock) return { block: "", truncated: false, originalLength: 0 };
   const originalLength = rawBlock.length;
@@ -700,7 +687,7 @@ function isLikelyBinaryBlock(block: string): boolean {
 }
 
 function isLikelyHugeDiff(block: string, lowerPath: string): boolean {
-  if (block.length <= MAX_NON_SOURCE_BLOCK_CHARS) return false;
+  if (block.length <= DIFF_LIMITS.MAX_NON_SOURCE_BLOCK_CHARS) return false;
   // Allow large code diffs that contain hunk headers
   if (/^@@/m.test(block)) return false;
   if (NON_SOURCE_EXTENSIONS.some((ext) => lowerPath.endsWith(ext))) return true;
@@ -739,7 +726,10 @@ function extractHighlights(summary: string): string[] {
   let inHighlights = false;
   for (let i = 0; i < lines.length; i++) {
     const ln = lines[i].trim();
-    if (/^Key Impacts:\s*$/i.test(ln)) { inHighlights = true; continue; }
+    if (/^Key Impacts:\s*$/i.test(ln)) {
+      inHighlights = true;
+      continue;
+    }
     if (inHighlights) {
       if (!ln) break;
       const m = /^[-*]\s*(.+)$/.exec(ln);
@@ -752,7 +742,7 @@ function extractHighlights(summary: string): string[] {
     for (const ln of lines) {
       const m = /^[-*]\s*(.+)$/.exec(ln.trim());
       if (m) out.push(m[1].trim());
-      if (out.length >= 5) break;
+      if (out.length >= DISPLAY_LIMITS.MAX_HEURISTIC_HIGHLIGHTS) break;
     }
   }
   return out;

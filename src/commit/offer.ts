@@ -2,7 +2,11 @@ import { spawn } from "node:child_process";
 import { Color } from "../ui/colors";
 import { envBool, Env } from "../config";
 
-function run(cmd: string, args: string[], opts?: { stdin?: string; stdio?: "pipe" | "inherit" }): Promise<{ code: number; stdout: string; stderr: string }> {
+function run(
+  cmd: string,
+  args: string[],
+  opts?: { stdin?: string; stdio?: "pipe" | "inherit" }
+): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise((resolve) => {
     let child: ReturnType<typeof spawn> | undefined;
     try {
@@ -14,15 +18,26 @@ function run(cmd: string, args: string[], opts?: { stdin?: string; stdio?: "pipe
     }
     let out = "";
     let err = "";
-    if (child.stdout) { child.stdout.setEncoding("utf8"); child.stdout.on("data", (d) => (out += d)); }
-    if (child.stderr) { child.stderr.setEncoding("utf8"); child.stderr.on("data", (d) => (err += d)); }
+    if (child.stdout) {
+      child.stdout.setEncoding("utf8");
+      child.stdout.on("data", (d) => (out += d));
+    }
+    if (child.stderr) {
+      child.stderr.setEncoding("utf8");
+      child.stderr.on("data", (d) => (err += d));
+    }
     child.on("close", (code) => resolve({ code: code ?? 0, stdout: out, stderr: err }));
-    if (opts?.stdin && child.stdin) { child.stdin.write(opts.stdin); child.stdin.end(); }
+    if (opts?.stdin && child.stdin) {
+      child.stdin.write(opts.stdin);
+      child.stdin.end();
+    }
   });
 }
 
 async function yesNoPrompt(question: string, defYes: boolean): Promise<boolean> {
-  const defLabel = defYes ? `${Color.yellow}[Y|n]${Color.reset} ${Color.dim}[default: Y]${Color.reset}` : `${Color.yellow}[y|N]${Color.reset} ${Color.dim}[default: N]${Color.reset}`;
+  const defLabel = defYes
+    ? `${Color.yellow}[Y|n]${Color.reset} ${Color.dim}[default: Y]${Color.reset}`
+    : `${Color.yellow}[y|N]${Color.reset} ${Color.dim}[default: N]${Color.reset}`;
   process.stdout.write(`\n${Color.bold}${question}${Color.reset} ${defLabel}: ${Color.cyan}`);
   const ans = await readLine();
   process.stdout.write(Color.reset);
@@ -40,34 +55,43 @@ function readLine(): Promise<string> {
     stdin.resume();
     let buf = "";
     const onData = (chunk: string) => {
-      if (chunk === "\u0003") { // Ctrl+C
+      if (chunk === "\u0003") {
+        // Ctrl+C
         stdin.off("data", onData);
         stdin.pause();
         process.exit(130);
       }
-      if (chunk === "\n" || chunk === "\r") { stdin.off("data", onData); stdin.pause(); resolve(buf); }
-      else { buf += chunk; }
+      if (chunk === "\n" || chunk === "\r") {
+        stdin.off("data", onData);
+        stdin.pause();
+        resolve(buf);
+      } else {
+        buf += chunk;
+      }
     };
     stdin.on("data", onData);
   });
 }
 
-async function readLineWithTimeout(ms: number, def: string): Promise<string> {
-  return new Promise(async (resolve) => {
+async function _readLineWithTimeout(ms: number, def: string): Promise<string> {
+  return new Promise((resolve) => {
     let settled = false;
     const t = setTimeout(() => {
       if (!settled) {
         settled = true;
-        try { process.stdin.pause(); } catch {}
+        try {
+          process.stdin.pause();
+        } catch {}
         resolve(def);
       }
     }, ms);
-    const ans = await readLine();
-    if (!settled) {
-      settled = true;
-      clearTimeout(t);
-      resolve(ans);
-    }
+    void readLine().then((ans) => {
+      if (!settled) {
+        settled = true;
+        clearTimeout(t);
+        resolve(ans);
+      }
+    });
   });
 }
 
@@ -129,23 +153,33 @@ async function pushCurrentBranch(): Promise<void> {
   // No upstream: determine remote
   let remote = (await safeGit("config", "--get", `branch.${cur}.remote`)).trim();
   if (!remote) {
-    const rems = (await safeGit("remote")).split("\n").map((s) => s.trim()).filter(Boolean);
-    remote = rems.includes("origin") ? "origin" : (rems[0] || "");
+    const rems = (await safeGit("remote"))
+      .split("\n")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    remote = rems.includes("origin") ? "origin" : rems[0] || "";
   }
   if (!remote) throw new Error("no Git remote configured");
   await gitExec("push", "-u", remote, cur);
 }
 
 async function safeGit(...args: string[]): Promise<string> {
-  try { return await git(...args); } catch { return ""; }
+  try {
+    return await git(...args);
+  } catch {
+    return "";
+  }
 }
 
 type TagInfo = { tag: string; vPrefix: boolean; major: number; minor: number; patch: number };
 
-async function latestSemverTag(): Promise<TagInfo | null> {
+async function _latestSemverTag(): Promise<TagInfo | null> {
   const out = (await safeGit("tag", "-l", "--sort=-v:refname")).trim();
   if (!out) return null;
-  const lines = out.split("\n").map((s) => s.trim()).filter(Boolean);
+  const lines = out
+    .split("\n")
+    .map((s) => s.trim())
+    .filter(Boolean);
   const rx = /^(v)?(\d+)\.(\d+)\.(\d+)$/;
   for (const line of lines) {
     const m = rx.exec(line);
@@ -159,23 +193,28 @@ async function latestSemverTag(): Promise<TagInfo | null> {
   return null;
 }
 
-function formatTag(vPrefix: boolean, major: number, minor: number, patch: number): string {
+function _formatTag(vPrefix: boolean, major: number, minor: number, patch: number): string {
   return (vPrefix ? "v" : "") + `${major}.${minor}.${patch}`;
 }
 
-async function buildTagMessage(fromTag: string): Promise<string> {
+async function _buildTagMessage(fromTag: string): Promise<string> {
   const out = (await safeGit("log", `${fromTag}..HEAD`, "--pretty=format:%s")).trim();
-  const lines = out ? out.split("\n").map((s) => s.trim()).filter(Boolean) : [];
+  const lines = out
+    ? out
+        .split("\n")
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : [];
   const bullets = lines.map((l) => `- ${l}`).join("\n");
   return `Changes since ${fromTag}:\n${bullets}`;
 }
 
-async function createTag(tag: string, message: string): Promise<void> {
+async function _createTag(tag: string, message: string): Promise<void> {
   if (message && message.trim()) await gitExec("tag", "-a", tag, "-m", message);
   else await gitExec("tag", tag);
 }
 
-async function pushTag(tag: string): Promise<void> {
+async function _pushTag(tag: string): Promise<void> {
   // Try to detect upstream remote of current branch
   const upstream = (await safeGit("rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}")).trim();
   if (upstream && upstream.includes("/")) {
@@ -190,10 +229,16 @@ async function pushTag(tag: string): Promise<void> {
     remote = (await safeGit("config", "--get", `branch.${cur}.remote`)).trim();
   }
   if (!remote) {
-    const rems = (await safeGit("remote")).split("\n").map((s) => s.trim()).filter(Boolean);
-    remote = rems.includes("origin") ? "origin" : (rems[0] || "");
+    const rems = (await safeGit("remote"))
+      .split("\n")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    remote = rems.includes("origin") ? "origin" : rems[0] || "";
   }
-  if (remote) { await gitExec("push", remote, tag); return; }
+  if (remote) {
+    await gitExec("push", remote, tag);
+    return;
+  }
   // Last resort
   await gitExec("push", "--tags");
 }

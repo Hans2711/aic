@@ -1,7 +1,12 @@
 import { spawn } from "node:child_process";
 import { debugLog } from "./debug";
+import { DISPLAY_LIMITS } from "./constants";
 
-function run(cmd: string, args: string[], opts?: { stdin?: string }): Promise<{ stdout: string; stderr: string; code: number }> {
+function run(
+  cmd: string,
+  args: string[],
+  opts?: { stdin?: string }
+): Promise<{ stdout: string; stderr: string; code: number }> {
   return new Promise((resolve) => {
     let child: ReturnType<typeof spawn> | undefined;
     try {
@@ -14,19 +19,19 @@ function run(cmd: string, args: string[], opts?: { stdin?: string }): Promise<{ 
     }
     let out = "";
     let err = "";
-    child.stdout.setEncoding("utf8");
-    child.stderr.setEncoding("utf8");
-    child.stdout.on("data", (d) => (out += d));
-    child.stderr.on("data", (d) => (err += d));
+    child.stdout!.setEncoding("utf8");
+    child.stderr!.setEncoding("utf8");
+    child.stdout!.on("data", (d) => (out += d));
+    child.stderr!.on("data", (d) => (err += d));
     child.on("error", (e) => {
-      const msg = (e as any)?.message || "spawn error";
+      const msg = e?.message || "spawn error";
       resolve({ stdout: out, stderr: msg, code: 127 });
     });
     child.on("close", (code) => resolve({ stdout: out, stderr: err, code: code ?? 0 }));
     if (opts?.stdin) {
-      child.stdin.write(opts.stdin);
+      child.stdin!.write(opts.stdin);
     }
-    child.stdin.end();
+    child.stdin!.end();
   });
 }
 
@@ -166,7 +171,7 @@ async function issueText(num: number): Promise<string> {
     const title = (data.title || "").trim();
     let body = (data.body || "").trim();
     const r = [...body];
-    if (r.length > 200) body = r.slice(0, 200).join("");
+    if (r.length > DISPLAY_LIMITS.MAX_ISSUE_BODY_CHARS) body = r.slice(0, DISPLAY_LIMITS.MAX_ISSUE_BODY_CHARS).join("");
     return (title + ": " + body).trim();
   } catch {
     return "";

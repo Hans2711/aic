@@ -1,11 +1,11 @@
-import type { ProviderName } from "../config";
 import { Env, getEnv } from "../config";
-import { generateText } from 'ai';
-import { createOpenAI } from '@ai-sdk/openai';
-import { createAnthropic } from '@ai-sdk/anthropic';
-import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { generateText } from "ai";
+import { createOpenAI } from "@ai-sdk/openai";
+import { createAnthropic } from "@ai-sdk/anthropic";
+import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { debugLog } from "../debug";
 
+export type ProviderName = "openai" | "claude" | "gemini" | "custom";
 export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 
 export interface CompletionResponse {
@@ -27,10 +27,14 @@ export interface ProviderClient {
 
 export function getApiKeyForProvider(provider: ProviderName): string {
   switch (provider) {
-    case "claude": return getEnv(Env.CLAUDE_API_KEY);
-    case "gemini": return getEnv(Env.GEMINI_API_KEY);
-    case "custom": return getEnv(Env.CUSTOM_API_KEY); // may be empty
-    default: return getEnv(Env.OPENAI_API_KEY);
+    case "claude":
+      return getEnv(Env.CLAUDE_API_KEY);
+    case "gemini":
+      return getEnv(Env.GEMINI_API_KEY);
+    case "custom":
+      return getEnv(Env.CUSTOM_API_KEY); // may be empty
+    default:
+      return getEnv(Env.OPENAI_API_KEY);
   }
 }
 
@@ -41,10 +45,10 @@ function createProviderInstance(provider: ProviderName, apiKey: string, baseUrl?
     case "gemini":
       return createGoogleGenerativeAI({ apiKey });
     case "custom":
-      return createOpenAI({ 
-        apiKey, 
+      return createOpenAI({
+        apiKey,
         baseURL: baseUrl || getEnv(Env.CUSTOM_BASE_URL) || "http://127.0.0.1:1234",
-        compatibility: 'compatible', // Enable compatibility mode for custom providers
+        compatibility: "compatible", // Enable compatibility mode for custom providers
       });
     case "openai":
     default:
@@ -55,10 +59,12 @@ function createProviderInstance(provider: ProviderName, apiKey: string, baseUrl?
 // Helper function to detect GPT-5 reasoning models
 function isReasoningModel(model: string): boolean {
   const lowerModel = model.toLowerCase();
-  return lowerModel.startsWith('gpt-5') || 
-         lowerModel.startsWith('o1') || 
-         lowerModel.startsWith('o3') ||
-         lowerModel.startsWith('o4');
+  return (
+    lowerModel.startsWith("gpt-5") ||
+    lowerModel.startsWith("o1") ||
+    lowerModel.startsWith("o3") ||
+    lowerModel.startsWith("o4")
+  );
 }
 
 export function newProviderClient(provider: ProviderName, apiKey: string, baseUrl?: string): ProviderClient {
@@ -71,7 +77,7 @@ export function newProviderClient(provider: ProviderName, apiKey: string, baseUr
 
       // Detect if this is a reasoning model
       const isReasoning = provider === "openai" && isReasoningModel(model);
-      
+
       // For reasoning models, significantly increase token limit to allow both reasoning and output
       let effectiveMaxTokens = maxTokens;
       if (isReasoning && (!maxTokens || maxTokens < 3000)) {
@@ -89,7 +95,7 @@ export function newProviderClient(provider: ProviderName, apiKey: string, baseUr
           // Build generateText options
           const generateOptions: any = {
             model: providerInstance(model),
-            messages: messages.map(m => ({
+            messages: messages.map((m) => ({
               role: m.role,
               content: m.content,
             })),
@@ -102,8 +108,8 @@ export function newProviderClient(provider: ProviderName, apiKey: string, baseUr
           if (isReasoning) {
             generateOptions.providerOptions = {
               openai: {
-                reasoningEffort: 'low', // Use 'low' effort to balance speed and quality
-              }
+                reasoningEffort: "low", // Use 'low' effort to balance speed and quality
+              },
             };
             debugLog(`Using reasoningEffort: 'low' for model ${model}`);
           }
@@ -116,15 +122,17 @@ export function newProviderClient(provider: ProviderName, apiKey: string, baseUr
           debugLog(`AI SDK result text length: ${result.text?.length || 0}`);
           debugLog(`AI SDK finish reason: ${result.finishReason}`);
           debugLog(`AI SDK usage:`, JSON.stringify(result.usage));
-          
+
           if (result.text && result.text.trim()) {
             choices.push(result.text.trim());
           } else {
             debugLog(`WARNING: Empty response from AI SDK for model ${model}`);
-            
+
             // If we got empty response from reasoning model, throw error to trigger fallback
             if (isReasoning) {
-              throw new Error(`Empty response from reasoning model ${model}. The model may be using all tokens for internal reasoning. Try using reasoningEffort: 'minimal' or a non-reasoning model.`);
+              throw new Error(
+                `Empty response from reasoning model ${model}. The model may be using all tokens for internal reasoning. Try using reasoningEffort: 'minimal' or a non-reasoning model.`
+              );
             }
           }
 
@@ -141,14 +149,13 @@ export function newProviderClient(provider: ProviderName, apiKey: string, baseUr
           if (reasoningTokens !== undefined) {
             debugLog(`reasoning tokens: ${reasoningTokens}`);
           }
-
         } catch (error: any) {
           // Better error messages from AI SDK
-          if (error.name === 'AbortError') {
+          if (error.name === "AbortError") {
             throw new Error(`Request timeout after 120 seconds for model ${model}`);
           }
-          
-          debugLog('AI SDK error:', error.message || error);
+
+          debugLog("AI SDK error:", error.message || error);
           throw new Error(`${provider} error: ${error.message || String(error)}`);
         }
       }
@@ -156,18 +163,18 @@ export function newProviderClient(provider: ProviderName, apiKey: string, baseUr
       return { choices, raw: rawResult };
     },
 
-    async embed(_text: string): Promise<number[]> {
+    embed(_text: string): Promise<number[]> {
       // Embeddings not currently used in this application
-      return [];
+      return Promise.resolve([]);
     },
 
     async countTokens(modelId: string, text: string): Promise<number> {
       try {
         // Use AI SDK's built-in token counting
         const model = providerInstance(modelId);
-        
+
         // The AI SDK models have a countPromptTokens method
-        if (typeof (model as any).doCountTokens === 'function') {
+        if (typeof (model as any).doCountTokens === "function") {
           const result = await (model as any).doCountTokens({ prompt: text });
           return result;
         }
@@ -178,8 +185,7 @@ export function newProviderClient(provider: ProviderName, apiKey: string, baseUr
         const estimate = Math.ceil(text.length / 4);
         debugLog(`token count estimate for ${modelId}: ${estimate} tokens`);
         return estimate;
-        
-      } catch (error) {
+      } catch {
         // Fallback to character-based estimation
         const estimate = Math.ceil(text.length / 4);
         debugLog(`token count fallback for ${modelId}: ${estimate} tokens`);

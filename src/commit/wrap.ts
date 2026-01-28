@@ -6,12 +6,18 @@ export function wrapText(text: string, width: number): string {
   const paragraphs = text.split("\n");
   const out: string[] = [];
   for (const para of paragraphs) {
-    if (!para.trim()) { out.push(para); continue; }
+    if (!para.trim()) {
+      out.push(para);
+      continue;
+    }
     const sentences = splitSentences(para);
-    if (sentences.length === 0) { out.push(para); continue; }
+    if (sentences.length === 0) {
+      out.push(para);
+      continue;
+    }
     let line = "";
     for (const s of sentences) {
-      const candidate = line ? (line + " " + s) : s;
+      const candidate = line ? line + " " + s : s;
       if (line && candidate.length > width) {
         // Start a new line at sentence boundary
         out.push(line);

@@ -33,4 +33,3 @@ export const Icon = {
   prompt: "➤",
   info: "ℹ",
 };
-

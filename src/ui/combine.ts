@@ -24,7 +24,9 @@ export async function selectWithCombine(opts: CombineSelectOptions): Promise<str
     for (let i = 0; i < items.length; i++) {
       process.stdout.write(`  ${Color.yellow}[${i + 1}]${Color.reset} ${Color.cyan}${items[i]}${Color.reset}\n`);
     }
-    process.stdout.write(`\n${Color.bold}Select [1-${items.length}]${Color.reset} ${Color.dim}[default: 1]${Color.reset}: ${Color.cyan}`);
+    process.stdout.write(
+      `\n${Color.bold}Select [1-${items.length}]${Color.reset} ${Color.dim}[default: 1]${Color.reset}: ${Color.cyan}`
+    );
     const choice = await readLine();
     const n = choice.trim() === "" ? 1 : Math.min(Math.max(parseInt(choice, 10) || 1, 1), items.length);
     process.stdout.write(Color.reset);
@@ -40,7 +42,8 @@ export async function selectWithCombine(opts: CombineSelectOptions): Promise<str
   const checked: boolean[] = new Array(items.length).fill(false);
   const n = () => items.length;
   const header = () => `${Color.gray}${Color.bold} ${opts.title ?? "Commit message suggestions"}:${Color.reset}\n`;
-  const instruction = () => `${Color.dim}Use ↑/↓ or j/k, Space to toggle select, numbers to pick, Enter to confirm.${Color.reset}\n`;
+  const instruction = () =>
+    `${Color.dim}Use ↑/↓ or j/k, Space to toggle select, numbers to pick, Enter to confirm.${Color.reset}\n`;
 
   const render = () => {
     process.stdout.write(`\r\x1b[2K` + header());
@@ -70,10 +73,15 @@ export async function selectWithCombine(opts: CombineSelectOptions): Promise<str
   };
 
   let backLines = render();
-  const moveUp = (lines: number) => { if (lines > 0) process.stdout.write(`\x1b[${lines}A`); };
+  const moveUp = (lines: number) => {
+    if (lines > 0) process.stdout.write(`\x1b[${lines}A`);
+  };
   const clearLine = () => process.stdout.write("\x1b[2K\r");
   const countChecked = () => checked.filter(Boolean).length;
-  const cleanup = () => { stdin.setRawMode?.(false); stdin.pause(); };
+  const cleanup = () => {
+    stdin.setRawMode?.(false);
+    stdin.pause();
+  };
 
   return await new Promise<string>((resolve) => {
     const onData = async (chunk: string) => {
@@ -122,13 +130,15 @@ export async function selectWithCombine(opts: CombineSelectOptions): Promise<str
               backLines = n() + 2;
               // Reattach listener
               stdin.on("data", onData);
-            } catch (e) {
+            } catch {
               stop(false);
               // Re-enter raw mode and keep the current list so the user can try again
               stdin.setRawMode?.(true);
               stdin.resume();
               stdin.setEncoding("utf8");
-              process.stderr.write(`${Color.red}Combine failed; keeping current suggestions. Try again or select a single item.${Color.reset}\n`);
+              process.stderr.write(
+                `${Color.red}Combine failed; keeping current suggestions. Try again or select a single item.${Color.reset}\n`
+              );
               render();
               backLines = n() + 2;
               stdin.on("data", onData);
@@ -137,7 +147,13 @@ export async function selectWithCombine(opts: CombineSelectOptions): Promise<str
           }
           // If exactly one is checked, return it; otherwise return current selection
           if (cnt === 1) {
-            for (let i = 0; i < n(); i++) if (checked[i]) { cleanup(); stdin.off("data", onData); resolve(items[i]); return; }
+            for (let i = 0; i < n(); i++)
+              if (checked[i]) {
+                cleanup();
+                stdin.off("data", onData);
+                resolve(items[i]);
+                return;
+              }
           }
           // No boxes checked: accept the currently highlighted suggestion
           cleanup();
@@ -146,16 +162,31 @@ export async function selectWithCombine(opts: CombineSelectOptions): Promise<str
           return;
         }
         default:
-          if (b === "\u001b[A") { if (selected > 0) selected--; }
-          else if (b === "\u001b[B") { if (selected < n() - 1) selected++; }
-          else if (b >= "1" && b <= "9") {
+          if (b === "\u001b[A") {
+            if (selected > 0) selected--;
+          } else if (b === "\u001b[B") {
+            if (selected < n() - 1) selected++;
+          } else if (b >= "1" && b <= "9") {
             const v = b.charCodeAt(0) - "0".charCodeAt(0);
-            if (v >= 1 && v <= n()) { cleanup(); stdin.off("data", onData); resolve(items[v - 1]); return; }
-          } else if (b === "0" && n() === 10) { cleanup(); stdin.off("data", onData); resolve(items[9]); return; }
+            if (v >= 1 && v <= n()) {
+              cleanup();
+              stdin.off("data", onData);
+              resolve(items[v - 1]);
+              return;
+            }
+          } else if (b === "0" && n() === 10) {
+            cleanup();
+            stdin.off("data", onData);
+            resolve(items[9]);
+            return;
+          }
       }
       // Re-render with accurate line count
       moveUp(backLines);
-      for (let i = 0; i < backLines; i++) { clearLine(); if (i < backLines - 1) process.stdout.write("\n"); }
+      for (let i = 0; i < backLines; i++) {
+        clearLine();
+        if (i < backLines - 1) process.stdout.write("\n");
+      }
       moveUp(backLines - 1);
       backLines = render();
     };
@@ -167,8 +198,12 @@ function readLine(): Promise<string> {
   return new Promise((resolve) => {
     let buf = "";
     const onData = (chunk: string) => {
-      if (chunk === "\n" || chunk === "\r") { process.stdin.off("data", onData); resolve(buf); }
-      else { buf += chunk; }
+      if (chunk === "\n" || chunk === "\r") {
+        process.stdin.off("data", onData);
+        resolve(buf);
+      } else {
+        buf += chunk;
+      }
     };
     process.stdin.on("data", onData);
   });

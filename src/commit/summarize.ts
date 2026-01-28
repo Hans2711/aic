@@ -24,7 +24,12 @@ export function splitDiffIntoFiles(diff: string): string[] {
 }
 
 // Group file blocks into chunks so that each chunk's token count is <= budget.
-export async function chunkFilesByBudget(client: ProviderClient, model: string, files: string[], budgetTokens: number): Promise<string[]> {
+export async function chunkFilesByBudget(
+  client: ProviderClient,
+  model: string,
+  files: string[],
+  budgetTokens: number
+): Promise<string[]> {
   const chunks: string[] = [];
   let buf: string[] = [];
   let curTokens = 0;
@@ -80,11 +85,20 @@ export async function chunkFilesByBudget(client: ProviderClient, model: string, 
 
 // Summarize a chunk into concise bullet-like lines highlighting file changes and key impacts.
 export async function summarizeChunk(client: ProviderClient, model: string, chunk: string): Promise<string> {
-  const system = "You summarize git diffs by file. For each file (<=1 line), state the nature of change (add/remove/modify/rename) and highlight API changes, new/removed public functions, dependency/version changes, security-sensitive changes, and configuration updates. After the list, include a short 'Key Impacts:' section (<=3 lines). No commit messages, no speculation. Do not ask for more information; if parts of the diff are large or missing context, still produce the best possible summary from available headers and hunks.";
+  const system =
+    "You summarize git diffs by file. For each file (<=1 line), state the nature of change (add/remove/modify/rename) and highlight API changes, new/removed public functions, dependency/version changes, security-sensitive changes, and configuration updates. After the list, include a short 'Key Impacts:' section (<=3 lines). No commit messages, no speculation. Do not ask for more information; if parts of the diff are large or missing context, still produce the best possible summary from available headers and hunks.";
   const user = chunk;
   debugLog("summarizeChunk: system prompt:", system);
   debugLog("summarizeChunk: user chunk length=", String(chunk.length));
-  const resp = await client.chat({ model, messages: [ { role: "system", content: system }, { role: "user", content: user } ], maxTokens: 512, temperature: 0.2 });
+  const resp = await client.chat({
+    model,
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: user },
+    ],
+    maxTokens: 512,
+    temperature: 0.2,
+  });
   let out = (resp.choices?.[0] || "").trim();
   if (!out) {
     // Fallback: derive a minimal summary from diff headers
@@ -98,7 +112,7 @@ async function summarizeChunksConcurrently(
   model: string,
   chunks: string[],
   concurrency: number,
-  label: string,
+  label: string
 ): Promise<string[]> {
   const total = chunks.length;
   const results = new Array<string>(total);
@@ -135,33 +149,67 @@ async function summarizeChunksConcurrently(
 // 2) pack into chunks by token budget
 // 3) summarize each chunk
 // 4) if combined summaries still exceed target budget, re-chunk and summarize again until it fits
-export async function progressiveSummarizeDiff(client: ProviderClient, model: string, diff: string, chunkBudgetTokens: number, targetBudgetTokens: number, concurrency: number): Promise<string> {
+export async function progressiveSummarizeDiff(
+  client: ProviderClient,
+  model: string,
+  diff: string,
+  chunkBudgetTokens: number,
+  targetBudgetTokens: number,
+  concurrency: number
+): Promise<string> {
   const files = splitDiffIntoFiles(diff);
-  debugLog(`progressiveSummarizeDiff: files=${files.length}, chunkBudget=${chunkBudgetTokens}, targetBudget=${targetBudgetTokens}, concurrency=${concurrency}`);
+  debugLog(
+    `progressiveSummarizeDiff: files=${files.length}, chunkBudget=${chunkBudgetTokens}, targetBudget=${targetBudgetTokens}, concurrency=${concurrency}`
+  );
   // First-level chunking
-  let chunks = await chunkFilesByBudget(client, model, files, chunkBudgetTokens);
-  let rawSummaries = await summarizeChunksConcurrently(client, model, chunks, Math.min(concurrency, chunks.length), "primary");
+  const chunks = await chunkFilesByBudget(client, model, files, chunkBudgetTokens);
+  const rawSummaries = await summarizeChunksConcurrently(
+    client,
+    model,
+    chunks,
+    Math.min(concurrency, chunks.length),
+    "primary"
+  );
   let summaries = rawSummaries.map((s, i) => `Chunk ${i + 1}/${chunks.length}\n${s}`);
   let combined = summaries.join("\n\n");
   // Re-summarize until within target budget
-  while (await estimateTokens(client, model, combined, {
-    budgetTokens: targetBudgetTokens,
-    cacheKey: fingerprintText(combined, `${model}:combined-summary`),
-    label: "combined-summary",
-  }) > targetBudgetTokens && summaries.length > 1) {
+  while (
+    (await estimateTokens(client, model, combined, {
+      budgetTokens: targetBudgetTokens,
+      cacheKey: fingerprintText(combined, `${model}:combined-summary`),
+      label: "combined-summary",
+    })) > targetBudgetTokens &&
+    summaries.length > 1
+  ) {
     debugLog("combined summary over target budget; re-chunking for second-pass summarization");
     // Re-group summaries by budget and summarize groups
-    const groupChunks = await chunkFilesByBudget(client, model, summaries, Math.max(512, Math.floor(targetBudgetTokens * 0.8)));
-    const nextRaw = await summarizeChunksConcurrently(client, model, groupChunks, Math.min(concurrency, groupChunks.length), "secondary");
+    const groupChunks = await chunkFilesByBudget(
+      client,
+      model,
+      summaries,
+      Math.max(512, Math.floor(targetBudgetTokens * 0.8))
+    );
+    const nextRaw = await summarizeChunksConcurrently(
+      client,
+      model,
+      groupChunks,
+      Math.min(concurrency, groupChunks.length),
+      "secondary"
+    );
     summaries = nextRaw;
     combined = summaries.join("\n\n");
     if (summaries.length === 1) break;
   }
-  debugLog("final combined summary tokens≈", String(await estimateTokens(client, model, combined, {
-    budgetTokens: targetBudgetTokens,
-    cacheKey: fingerprintText(combined, `${model}:combined-summary-final`),
-    label: "combined-summary-final",
-  })));
+  debugLog(
+    "final combined summary tokens≈",
+    String(
+      await estimateTokens(client, model, combined, {
+        budgetTokens: targetBudgetTokens,
+        cacheKey: fingerprintText(combined, `${model}:combined-summary-final`),
+        label: "combined-summary-final",
+      })
+    )
+  );
   return combined;
 }
 
@@ -190,7 +238,9 @@ function fallbackSummaryForChunk(chunk: string): string {
     while ((m = re2b.exec(chunk)) !== null) files.add(stripABPrefix(m[1]));
   }
   if (files.size === 0) return "(summary unavailable)";
-  const lines = Array.from(files).slice(0, 50).map((f) => `- ${f}: changed`);
+  const lines = Array.from(files)
+    .slice(0, 50)
+    .map((f) => `- ${f}: changed`);
   return `Files changed (fallback):\n${lines.join("\n")}`;
 }
 
@@ -221,7 +271,8 @@ function shrinkDiffForSummarization(diffBlock: string, _targetTokens: number): {
 function buildLargeDiffStubForSummaries(diffBlock: string): string {
   const lines = diffBlock.split(/\r?\n/);
   const header = lines.find((ln) => ln.startsWith("diff --git ")) ?? lines[0] ?? "diff --git a/??? b/???";
-  const pathLine = lines.find((ln) => ln.startsWith("+++ ")) ?? lines.find((ln) => ln.startsWith("--- ")) ?? "(path unavailable)";
+  const pathLine =
+    lines.find((ln) => ln.startsWith("+++ ")) ?? lines.find((ln) => ln.startsWith("--- ")) ?? "(path unavailable)";
   return `${header}\n${pathLine}\n... (diff omitted for summarization due to size; rely on impact analysis) ...`;
 }
 

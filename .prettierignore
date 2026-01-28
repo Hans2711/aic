@@ -1,0 +1,16 @@
+# Dependencies
+node_modules
+.gomodcache
+.gopath
+.gocache
+
+# Build outputs
+dist
+*.js.map
+
+# Misc
+.DS_Store
+*.log
+coverage
+.turbo
+.next

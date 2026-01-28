@@ -12,4 +12,3 @@ export function stripLeadingListMarker(s: string): string {
   }
   return t || orig;
 }
-

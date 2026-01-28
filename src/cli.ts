@@ -12,7 +12,6 @@ import {
 } from "./config";
 import { Color, Icon, initColors } from "./ui/colors";
 import { spinner } from "./ui/spinner";
-import { selectInteractive } from "./ui/select";
 import { selectWithCombine } from "./ui/combine";
 import { generateSuggestions } from "./commit/generate";
 import { loadCombineConfig } from "./config";
@@ -56,7 +55,9 @@ class MainCommand extends Command {
     const apiKey = getApiKeyForProvider(cfg.provider);
     if (!apiKey && cfg.provider !== "custom" && !envBool(Env.AIC_MOCK)) {
       this.printHelp(cfg.model);
-      this.context.stderr.write(`${Color.yellow}Hint:${Color.reset} export a provider API key, e.g. ${Color.green}export OPENAI_API_KEY=sk-...${Color.reset}\n`);
+      this.context.stderr.write(
+        `${Color.yellow}Hint:${Color.reset} export a provider API key, e.g. ${Color.green}export OPENAI_API_KEY=sk-...${Color.reset}\n`
+      );
       return 1;
     }
     // Show staged files included in the diff (transparency), unless in daemon mode
@@ -89,16 +90,23 @@ class MainCommand extends Command {
         items: sugs,
         onCombine: async (selected) => {
           const cc = loadCombineConfig(this.systemAddition ?? "");
-          const combined = await generateCombinedSuggestions({ provider: cc.provider, model: cc.model, suggestions: cc.suggestions, systemAddition: cc.systemAddition }, selected);
+          const combined = await generateCombinedSuggestions(
+            { provider: cc.provider, model: cc.model, suggestions: cc.suggestions, systemAddition: cc.systemAddition },
+            selected
+          );
           return { suggestions: combined, modelName: cc.model };
         },
       });
-      this.context.stdout.write(`\n${Color.bold}Selected commit message:${Color.reset}\n  ${Color.green}${choice}${Color.reset}\n`);
+      this.context.stdout.write(
+        `\n${Color.bold}Selected commit message:${Color.reset}\n  ${Color.green}${choice}${Color.reset}\n`
+      );
       await offerCommit(choice);
     } catch (err) {
       stop(false);
       const msg = (err as Error)?.message || String(err);
-      this.context.stderr.write(`${Color.bold}${Color.red} ${Icon.error} ERROR${Color.reset}  ${Color.red}${msg}${Color.reset}\n`);
+      this.context.stderr.write(
+        `${Color.bold}${Color.red} ${Icon.error} ERROR${Color.reset}  ${Color.red}${msg}${Color.reset}\n`
+      );
       return 1;
     }
     return 0;
@@ -109,9 +117,11 @@ class MainCommand extends Command {
     const maxKey = rows.reduce((m, [k]) => Math.max(m, k.length), 0);
     const pad = (s: string) => s + " ".repeat(maxKey - s.length);
     const b = this.context.stdout;
-    b.write(`${Color.bold}${Color.cyan}aic${Color.reset} – ${Color.magenta}AI-assisted git commit message generator${Color.reset}\n\n`);
+    b.write(
+      `${Color.bold}${Color.cyan}aic${Color.reset} – ${Color.magenta}AI-assisted git commit message generator${Color.reset}\n\n`
+    );
     b.write(`${Color.bold}Usage${Color.reset}:\n`);
-    b.write("  aic [-s \"extra instruction\"] [--version] [--no-color]\n\n");
+    b.write('  aic [-s "extra instruction"] [--version] [--no-color]\n\n');
     b.write(`${Color.bold}Arguments & Environment${Color.reset}:\n`);
     for (const [k, v] of rows) {
       const key = pad(k);
@@ -126,17 +136,17 @@ class MainCommand extends Command {
 class AnalyzeCommand extends Command {
   static paths = [["analyze"]];
   limit = Option.String("--limit", { required: false });
-  async execute() {
+  execute(): Promise<number> {
     this.context.stdout.write("analyze: not implemented yet (M1 scaffolding).\n");
-    return 0;
+    return Promise.resolve(0);
   }
 }
 
 class UpdateCommand extends Command {
   static paths = [["update"]];
-  async execute() {
+  execute(): Promise<number> {
     this.context.stdout.write("update: not implemented yet (M1 scaffolding).\n");
-    return 0;
+    return Promise.resolve(0);
   }
 }
 
