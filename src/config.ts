@@ -30,6 +30,8 @@ export const Env = {
   CUSTOM_BASE_URL: "CUSTOM_BASE_URL",
   CUSTOM_CHAT_COMPLETIONS_PATH: "CUSTOM_CHAT_COMPLETIONS_PATH",
   AIC_IGNORE_PREFIXES: "AIC_IGNORE_PREFIXES",
+  AIC_SUMMARIZE_CONCURRENCY: "AIC_SUMMARIZE_CONCURRENCY",
+  AIC_SUGGESTION_CONCURRENCY: "AIC_SUGGESTION_CONCURRENCY",
 } as const;
 
 export function getEnv(key: string): string {
@@ -58,7 +60,7 @@ export function warnUnknownAICEnv() {
     Env.AIC_DAEMON, Env.AIC_DEAMON_ALIAS,
     Env.AIC_PROVIDER, Env.AIC_COMBINE_PROVIDER, Env.AIC_COMBINE_MODEL, Env.AIC_COMBINE_SUGGESTIONS,
     Env.CUSTOM_BASE_URL, Env.CUSTOM_CHAT_COMPLETIONS_PATH, Env.CUSTOM_API_KEY,
-    Env.AIC_IGNORE_PREFIXES,
+    Env.AIC_IGNORE_PREFIXES, Env.AIC_SUMMARIZE_CONCURRENCY, Env.AIC_SUGGESTION_CONCURRENCY,
   ]);
   let headerPrinted = false;
   for (const [k] of Object.entries(process.env)) {
@@ -124,6 +126,8 @@ export type RuntimeConfig = {
   model: string;
   suggestions: number;
   systemAddition: string;
+  summarizeConcurrency: number;
+  suggestionConcurrency: number;
 };
 
 export function autodetectProvider(): ProviderName {
@@ -145,7 +149,9 @@ export function loadConfig(systemAddition = ""): RuntimeConfig {
   let suggestions = envIntInRange(Env.AIC_SUGGESTIONS, suggestionsDefault, 1, 10);
   const userModel = getEnv(Env.AIC_MODEL).trim();
   if (userModel) model = userModel;
-  return { provider, model, suggestions, systemAddition: systemAddition.trim() };
+  const summarizeConcurrency = envIntInRange(Env.AIC_SUMMARIZE_CONCURRENCY, 10, 1, 20);
+  const suggestionConcurrency = envIntInRange(Env.AIC_SUGGESTION_CONCURRENCY, 10, 1, 20);
+  return { provider, model, suggestions, systemAddition: systemAddition.trim(), summarizeConcurrency, suggestionConcurrency };
 }
 
 export function loadCombineConfig(systemAddition = ""): RuntimeConfig {
@@ -170,7 +176,7 @@ export function loadCombineConfig(systemAddition = ""): RuntimeConfig {
 
   // Suggestions override for combine
   const suggestions = envIntInRange(Env.AIC_COMBINE_SUGGESTIONS, base.suggestions, 1, 10);
-  return { provider, model, suggestions, systemAddition: base.systemAddition };
+  return { provider, model, suggestions, systemAddition: base.systemAddition, summarizeConcurrency: base.summarizeConcurrency, suggestionConcurrency: base.suggestionConcurrency };
 }
 
 export function helpEnvRowsCore(): Array<[string, string]> {
@@ -195,6 +201,8 @@ export function helpEnvRowsCore(): Array<[string, string]> {
     [Env.AIC_DAEMON, "(optional) Daemon mode: minimal output; use worktree diff"],
     [Env.AIC_DEAMON_ALIAS, "(alias) Legacy spelling; same as AIC_DAEMON"],
     [Env.AIC_IGNORE_PREFIXES, "(optional) Ignore path prefixes in diffs (comma-separated; default: dist/,node_modules/,build/,out/,coverage/,target/,.next/,.turbo/)"],
+    [Env.AIC_SUMMARIZE_CONCURRENCY, "(optional) Concurrent API calls for diff summarization (1-20; default: 10)"],
+    [Env.AIC_SUGGESTION_CONCURRENCY, "(optional) Concurrent API calls for suggestion generation (1-20; default: 10)"],
     [Env.NO_COLOR, "(optional) Standard flag to disable colors"],
     [Env.TERM, "(optional) Terminal type; affects color detection"],
     [Env.COLUMNS, "(optional) Terminal width override for UI"],

@@ -45,6 +45,96 @@ const NON_SOURCE_EXTENSIONS = [
 
 const MAX_NON_SOURCE_BLOCK_CHARS = 120_000;
 
+// Helper function to generate suggestions in parallel with controlled concurrency
+async function generateSuggestionsParallel(
+  client: any,
+  model: string,
+  messages: Array<{ role: "system" | "user"; content: string }>,
+  maxTokens: number,
+  temperature: number,
+  target: number,
+  concurrency: number
+): Promise<string[]> {
+  const suggestions: string[] = [];
+  const seen = new Set<string>();
+  let currentModel = model;
+  let retriedWithFallback = false;
+  
+  // Worker pool pattern: limit concurrent API calls
+  const workerCount = Math.min(concurrency, target);
+  let nextIndex = 0;
+  let successfulCalls = 0;
+  
+  debugLog(`generateSuggestionsParallel: target=${target}, concurrency=${workerCount}, model=${currentModel}`);
+  
+  const workers = Array.from({ length: workerCount }, () =>
+    (async () => {
+      while (suggestions.length < target && successfulCalls < target * 3) {
+        const current = nextIndex++;
+        
+        try {
+          const resp = await client.chat({ 
+            model: currentModel, 
+            messages, 
+            maxTokens, 
+            temperature, 
+            n: 1 
+          });
+          
+          successfulCalls++;
+          
+          for (const raw of resp.choices) {
+            if (!raw || !raw.trim()) {
+              // Empty response - if it's a reasoning model, trigger fallback
+              if (currentModel.includes('gpt-5') && !retriedWithFallback) {
+                debugLog(`Reasoning model ${currentModel} returned empty response, falling back to gpt-4o`);
+                currentModel = 'gpt-4o';
+                retriedWithFallback = true;
+                nextIndex = suggestions.length; // Reset to retry from current position
+                return; // Exit this worker, others will continue with new model
+              }
+              continue;
+            }
+            
+            const cleaned = postProcess(raw);
+            const norm = cleaned.toLowerCase();
+            if (cleaned && !seen.has(norm)) {
+              seen.add(norm);
+              suggestions.push(cleaned);
+              debugLog(`Generated suggestion ${suggestions.length}/${target}`);
+            }
+            
+            if (suggestions.length >= target) {
+              return; // Target reached, exit worker
+            }
+          }
+        } catch (error: any) {
+          debugLog(`API call failed: ${error.message}`);
+          
+          // If reasoning model fails with empty responses and we haven't retried yet, fallback to gpt-4o
+          if (!retriedWithFallback && currentModel.includes('gpt-5') && error.message.includes('empty response')) {
+            debugLog(`Reasoning model ${currentModel} failed with empty responses, falling back to gpt-4o`);
+            currentModel = 'gpt-4o';
+            retriedWithFallback = true;
+            nextIndex = suggestions.length; // Reset to retry from current position
+            return; // Exit this worker
+          }
+          
+          // For other errors, continue trying with remaining attempts
+          if (successfulCalls >= target * 3) {
+            throw error; // Give up after too many attempts
+          }
+        }
+      }
+    })()
+  );
+  
+  await Promise.allSettled(workers);
+  
+  debugLog(`generateSuggestionsParallel: generated ${suggestions.length} unique suggestions`);
+  return suggestions;
+}
+
 export async function generateSuggestions(cfg: SuggestionConfig): Promise<string[]> {
   if (envBool(Env.AIC_MOCK)) {
     const mock = [
@@ -91,7 +181,7 @@ export async function generateSuggestions(cfg: SuggestionConfig): Promise<string
   const finalBudget = 12000; // tokens for final combined summary fed into generation
 
   // Summarize entire diff progressively without truncation
-  let summary = await progressiveSummarizeDiff(client, summarizeModel, diff, chunkBudget, finalBudget);
+  let summary = await progressiveSummarizeDiff(client, summarizeModel, diff, chunkBudget, finalBudget, cfg.summarizeConcurrency);
   debugLog("===== SUMMARY START =====\n" + summary + "\n===== SUMMARY END =====");
   const MAX_SUMMARY_CHARS = 6000;
   if (summary.length > MAX_SUMMARY_CHARS) {
@@ -161,46 +251,19 @@ export async function generateSuggestions(cfg: SuggestionConfig): Promise<string
   ];
   debugLog("suggestions user content length=", String(userContent.length));
 
-  const suggestions: string[] = [];
-  const seen = new Set<string>();
   const target = Math.max(1, cfg.suggestions);
-  let attempts = 0;
-  let retriedWithFallback = false;
+
+  // Generate suggestions using parallel API calls for better performance
+  const suggestions = await generateSuggestionsParallel(
+    client,
+    chosenModel,
+    messages,
+    maxTokens,
+    temperature,
+    target,
+    cfg.suggestionConcurrency
+  );
   
-  while (suggestions.length < target && attempts < target * 3) {
-    attempts++;
-    const need = Math.max(1, target - suggestions.length);
-    
-    try {
-      const resp = await client.chat({ model: chosenModel, messages, maxTokens, temperature, n: need });
-      let emptyCount = 0;
-      for (const raw of resp.choices) {
-        if (!raw || !raw.trim()) emptyCount++;
-        const cleaned = postProcess(raw);
-        const norm = cleaned.toLowerCase();
-        if (cleaned && !seen.has(norm)) {
-          seen.add(norm);
-          suggestions.push(cleaned);
-        }
-        if (suggestions.length >= target) break;
-      }
-      // Fail fast if all responses were empty (reasoning model using all tokens)
-      if (emptyCount === resp.choices.length && emptyCount > 0) {
-        throw new Error(`Model returned ${emptyCount} empty response(s). Reasoning model may be using all tokens for internal reasoning.`);
-      }
-    } catch (error: any) {
-      // If reasoning model fails with empty responses and we haven't retried yet, fallback to gpt-4o
-      if (!retriedWithFallback && chosenModel.includes('gpt-5') && error.message.includes('empty response')) {
-        debugLog(`Reasoning model ${chosenModel} failed with empty responses, falling back to gpt-4o`);
-        chosenModel = 'gpt-4o';
-        retriedWithFallback = true;
-        attempts--; // Don't count this as an attempt
-        continue; // Retry with fallback model
-      }
-      // Otherwise, re-throw the error
-      throw error;
-    }
-  }
   if (suggestions.length === 0) throw new Error("empty suggestions");
   // Ensure exactly target count
   return suggestions.slice(0, target);

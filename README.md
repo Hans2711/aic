@@ -46,6 +46,8 @@ Core behavior:
 - `AIC_NO_COLOR` / `--no-color`: disable colored output.
 - `AIC_DAEMON` (or legacy `AIC_DEAMON`): use worktree diff and suppress staged-file banner.
 - `AIC_IGNORE_PREFIXES`: comma-separated prefixes to drop from the diff (default includes `dist/`, `node_modules/`, `build/`, `out/`, `coverage/`, `target/`, `.next/`, `.turbo/`).
+- `AIC_SUMMARIZE_CONCURRENCY`: number of concurrent API calls for diff chunk summarization (1-20; default: 10). Increase for faster summarization of large diffs, decrease if hitting API rate limits.
+- `AIC_SUGGESTION_CONCURRENCY`: number of concurrent API calls for suggestion generation (1-20; default: 10). Controls how many suggestions are generated in parallel.
 
 Provider selection:
 

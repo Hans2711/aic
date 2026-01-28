@@ -135,12 +135,12 @@ async function summarizeChunksConcurrently(
 // 2) pack into chunks by token budget
 // 3) summarize each chunk
 // 4) if combined summaries still exceed target budget, re-chunk and summarize again until it fits
-export async function progressiveSummarizeDiff(client: ProviderClient, model: string, diff: string, chunkBudgetTokens: number, targetBudgetTokens: number): Promise<string> {
+export async function progressiveSummarizeDiff(client: ProviderClient, model: string, diff: string, chunkBudgetTokens: number, targetBudgetTokens: number, concurrency: number): Promise<string> {
   const files = splitDiffIntoFiles(diff);
-  debugLog(`progressiveSummarizeDiff: files=${files.length}, chunkBudget=${chunkBudgetTokens}, targetBudget=${targetBudgetTokens}`);
+  debugLog(`progressiveSummarizeDiff: files=${files.length}, chunkBudget=${chunkBudgetTokens}, targetBudget=${targetBudgetTokens}, concurrency=${concurrency}`);
   // First-level chunking
   let chunks = await chunkFilesByBudget(client, model, files, chunkBudgetTokens);
-  let rawSummaries = await summarizeChunksConcurrently(client, model, chunks, Math.min(3, Math.max(1, chunks.length)), "primary");
+  let rawSummaries = await summarizeChunksConcurrently(client, model, chunks, Math.min(concurrency, chunks.length), "primary");
   let summaries = rawSummaries.map((s, i) => `Chunk ${i + 1}/${chunks.length}\n${s}`);
   let combined = summaries.join("\n\n");
   // Re-summarize until within target budget
@@ -152,7 +152,7 @@ export async function progressiveSummarizeDiff(client: ProviderClient, model: st
     debugLog("combined summary over target budget; re-chunking for second-pass summarization");
     // Re-group summaries by budget and summarize groups
     const groupChunks = await chunkFilesByBudget(client, model, summaries, Math.max(512, Math.floor(targetBudgetTokens * 0.8)));
-    const nextRaw = await summarizeChunksConcurrently(client, model, groupChunks, Math.min(2, Math.max(1, groupChunks.length)), "secondary");
+    const nextRaw = await summarizeChunksConcurrently(client, model, groupChunks, Math.min(concurrency, groupChunks.length), "secondary");
     summaries = nextRaw;
     combined = summaries.join("\n\n");
     if (summaries.length === 1) break;
