@@ -3,3 +3,4 @@
 .gocache
 .aic.json
 node_modules
+.DS_Store
