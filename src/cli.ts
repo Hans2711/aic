@@ -19,6 +19,7 @@ import { generateCombinedSuggestions } from "./commit/combine";
 import { offerCommit } from "./commit/offer";
 import { getApiKeyForProvider } from "./providers";
 import { stagedFiles } from "./git";
+import { formatEnvVarsHelp, formatEnvVarsTable } from "./ui/table";
 
 class MainCommand extends Command {
   static paths = [Command.Default];
@@ -26,16 +27,7 @@ class MainCommand extends Command {
   // Enrich built-in --help with environment variables
   static usage = Command.Usage({
     description: "AI-assisted git commit message generator",
-    details: (() => {
-      const rows = [...helpEnvRowsCore(), ...helpEnvRowsCustom()];
-      const maxKey = rows.reduce((m, [k]) => Math.max(m, k.length), 0);
-      const pad = (s: string) => s + " ".repeat(maxKey - s.length);
-      const lines: string[] = [];
-      lines.push("Environment variables:");
-      lines.push("");
-      for (const [k, v] of rows) lines.push(`  ${pad(k)}  ${v}`);
-      return lines.join("\n");
-    })(),
+    details: formatEnvVarsHelp(helpEnvRowsCore(), helpEnvRowsCustom()),
   });
 
   version = Option.Boolean("-v,--version", false, { description: "Show version and exit" });
@@ -113,21 +105,13 @@ class MainCommand extends Command {
   }
 
   private printHelp(model: string) {
-    const rows = [...helpEnvRowsCore(), ...helpEnvRowsCustom()];
-    const maxKey = rows.reduce((m, [k]) => Math.max(m, k.length), 0);
-    const pad = (s: string) => s + " ".repeat(maxKey - s.length);
     const b = this.context.stdout;
     b.write(
       `${Color.bold}${Color.cyan}aic${Color.reset} – ${Color.magenta}AI-assisted git commit message generator${Color.reset}\n\n`
     );
     b.write(`${Color.bold}Usage${Color.reset}:\n`);
     b.write('  aic [-s "extra instruction"] [--version] [--no-color]\n\n');
-    b.write(`${Color.bold}Arguments & Environment${Color.reset}:\n`);
-    for (const [k, v] of rows) {
-      const key = pad(k);
-      const color = v.includes("required") ? Color.red : Color.cyan;
-      b.write(`  ${Color.bold}${key}${Color.reset}  ${color}${v}${Color.reset}\n`);
-    }
+    b.write(`${Color.bold}${formatEnvVarsTable(helpEnvRowsCore(), helpEnvRowsCustom())}${Color.reset}\n`);
     b.write("\n");
     b.write(`${Color.dim}${Icon.info}${Color.reset} Default model: ${Color.cyan}${model}${Color.reset}\n`);
   }
