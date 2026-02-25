@@ -18,13 +18,23 @@ import {
 
 export type SuggestionConfig = ReturnType<typeof loadConfig> & { provider: ProviderName };
 
+const DIVERSITY_ANGLE_HINTS = [
+  "user-facing behavior or UX impact",
+  "core logic or architecture changes",
+  "API/data contract and interfaces touched",
+  "reliability, validation, or error handling updates",
+  "tests, verification, or coverage changes",
+  "dependencies, config, or tooling updates",
+  "performance or scalability-relevant edits",
+  "security-sensitive paths or hardening changes",
+] as const;
+
 // Helper function to generate suggestions in parallel with controlled concurrency
 async function generateSuggestionsParallel(
   client: any,
   model: string,
   messages: Array<{ role: "system" | "user"; content: string }>,
   maxTokens: number,
-  temperature: number,
   target: number,
   concurrency: number
 ): Promise<string[]> {
@@ -44,12 +54,28 @@ async function generateSuggestionsParallel(
   const workers = Array.from({ length: workerCount }, () =>
     (async () => {
       while (suggestions.length < target && successfulCalls < target * 3) {
-        nextIndex++;
+        const callIndex = nextIndex++;
+        const angle = DIVERSITY_ANGLE_HINTS[callIndex % DIVERSITY_ANGLE_HINTS.length];
+        const temperature = jitterTemperature(
+          callIndex,
+          GENERATION_CONFIG.SUGGESTION_TEMPERATURE_MIN,
+          GENERATION_CONFIG.SUGGESTION_TEMPERATURE_MAX,
+          GENERATION_CONFIG.SUGGESTION_TEMPERATURE
+        );
+        const callMessages = [
+          ...messages,
+          {
+            role: "user" as const,
+            content:
+              `Variation focus for this single alternative: ${angle}. ` +
+              "Keep the same grounding in the provided diff context.",
+          },
+        ];
 
         try {
           const resp = await client.chat({
             model: currentModel,
-            messages,
+            messages: callMessages,
             maxTokens,
             temperature,
             n: 1,
@@ -224,6 +250,7 @@ export async function generateSuggestions(cfg: SuggestionConfig): Promise<string
     "Describe only what changed in clear, specific terms. Do NOT include why the change was made. " +
     "If the message would exceed 80 characters, wrap ONLY between sentences; never break mid-sentence. If a sentence exceeds 80 characters, keep it on a single line. " +
     "Ground your subjects strictly on the provided FILES CHANGED, STRUCTURED HIGHLIGHTS, DIFF SUMMARY, and RAW DIFF; do not ask for additional input or return placeholders. " +
+    "A final user instruction may specify a 'Variation focus' for each candidate; follow it while staying faithful to the same diff context. " +
     "First determine which change is most important/impactful (e.g., largest scope, user-facing effects, architectural/security implications, or release-impacting) and prioritize that in the subject. Do not default to the first file or first bullet in the summary; choose based on impact. If several small changes share a theme, prefer a unifying subject. " +
     "Produce distinct alternatives with different phrasing and emphasis (varied verbs, structures, focus). Prefer richer, more informative subjects; where appropriate, reflect top HIGHLIGHTS explicitly; include specific details about the changes themselves, but never explain rationale, motivation, or reasons for the change (use a second line if needed). " +
     "Output only the subjects, one per choice.";
@@ -255,7 +282,6 @@ export async function generateSuggestions(cfg: SuggestionConfig): Promise<string
     chosenModel,
     messages,
     maxTokens,
-    GENERATION_CONFIG.SUGGESTION_TEMPERATURE,
     target,
     cfg.suggestionConcurrency
   );
@@ -753,4 +779,16 @@ function extractHighlights(summary: string): string[] {
     }
   }
   return out;
+}
+
+function jitterTemperature(seed: number, min: number, max: number, fallback: number): number {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) return fallback;
+  const value = pseudoRandom01(seed);
+  const temp = min + value * (max - min);
+  return Number(temp.toFixed(2));
+}
+
+function pseudoRandom01(seed: number): number {
+  const x = Math.sin((seed + 1) * 12.9898) * 43758.5453;
+  return x - Math.floor(x);
 }

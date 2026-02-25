@@ -38,6 +38,13 @@ export const DIFF_LIMITS = {
 export const GENERATION_CONFIG = {
   /** Temperature for suggestion generation (higher = more diverse) */
   SUGGESTION_TEMPERATURE: 0.6,
+  /** Min/max jitter range for suggestion generation temperature */
+  SUGGESTION_TEMPERATURE_MIN: 0.45,
+  SUGGESTION_TEMPERATURE_MAX: 0.85,
+  /** Base and min/max jitter range for combine generation temperature */
+  COMBINE_TEMPERATURE: 0.7,
+  COMBINE_TEMPERATURE_MIN: 0.55,
+  COMBINE_TEMPERATURE_MAX: 0.9,
   /** Max tokens for standard models */
   MAX_TOKENS_STANDARD: 768,
   /** Max tokens for reasoning models (e.g., gpt-5) */
