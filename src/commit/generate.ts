@@ -57,7 +57,10 @@ async function generateSuggestionsParallel(
 
           successfulCalls++;
 
+          if (suggestions.length >= target) return; // Target reached while awaiting
+
           for (const raw of resp.choices) {
+            if (suggestions.length >= target) return;
             if (!raw || !raw.trim()) {
               // Empty response - if it's a reasoning model, trigger fallback
               if (currentModel.includes("gpt-5") && !retriedWithFallback) {
@@ -74,8 +77,11 @@ async function generateSuggestionsParallel(
             const norm = cleaned.toLowerCase();
             if (cleaned && !seen.has(norm)) {
               seen.add(norm);
+              if (suggestions.length >= target) return;
               suggestions.push(cleaned);
-              debugSuccess("WORKER", `Generated suggestion ${suggestions.length}/${target}`);
+              if (suggestions.length <= target) {
+                debugSuccess("WORKER", `Generated suggestion ${suggestions.length}/${target}`);
+              }
             }
 
             if (suggestions.length >= target) {

@@ -111,7 +111,19 @@ export async function offerCommit(message: string): Promise<void> {
   // Non-interactive behavior
   if (envBool(Env.AIC_NON_INTERACTIVE)) {
     if (envBool(Env.AIC_AUTO_COMMIT)) {
-      await git("commit", "-m", message);
+      try {
+        await git("commit", "-m", message);
+      } catch (e: any) {
+        const ok = await copyToClipboard(message);
+        if (ok) {
+          process.stdout.write(`${Color.yellow}Commit failed; message copied to clipboard.${Color.reset}\n`);
+        } else {
+          process.stdout.write(
+            `${Color.yellow}Commit failed; could not copy to clipboard, please copy manually.${Color.reset}\n`
+          );
+        }
+        throw e;
+      }
     }
     return;
   }
@@ -127,7 +139,19 @@ export async function offerCommit(message: string): Promise<void> {
     }
     return;
   }
-  await gitExec("commit", "-m", message);
+  try {
+    await gitExec("commit", "-m", message);
+  } catch (e: any) {
+    const ok = await copyToClipboard(message);
+    if (ok) {
+      process.stdout.write(`${Color.yellow}Commit failed; message copied to clipboard.${Color.reset}\n`);
+    } else {
+      process.stdout.write(
+        `${Color.yellow}Commit failed; could not copy to clipboard, please copy manually.${Color.reset}\n`
+      );
+    }
+    throw e;
+  }
 
   // Ask to push
   const doPush = await yesNoPrompt("Push to current branch now?", true);
