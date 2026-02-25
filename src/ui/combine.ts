@@ -23,6 +23,7 @@ export async function selectWithCombine(opts: CombineSelectOptions): Promise<str
     process.stdout.write(`${Color.gray}${Color.bold} ${opts.title ?? "Suggestions"}:${Color.reset}\n`);
     for (let i = 0; i < items.length; i++) {
       process.stdout.write(`  ${Color.yellow}[${i + 1}]${Color.reset} ${Color.cyan}${items[i]}${Color.reset}\n`);
+      if (i < items.length - 1) process.stdout.write("\n");
     }
     process.stdout.write(
       `\n${Color.bold}Select [1-${items.length}]${Color.reset} ${Color.dim}[default: 1]${Color.reset}: ${Color.cyan}`
@@ -64,6 +65,10 @@ export async function selectWithCombine(opts: CombineSelectOptions): Promise<str
       const indent = "       "; // align under the start of text
       for (let j = 1; j < lines.length; j++) {
         process.stdout.write(`${indent}${color}${truncate(lines[j])}${Color.reset}\n`);
+        printed++;
+      }
+      if (i < n() - 1) {
+        process.stdout.write("\n");
         printed++;
       }
     }
@@ -126,8 +131,7 @@ export async function selectWithCombine(opts: CombineSelectOptions): Promise<str
               for (let i = checked.length; i < items.length; i++) checked[i] = false;
               // Re-render with new header
               process.stdout.write(`\n${Color.gray}${Color.bold} Combined suggestions:${Color.reset}\n`);
-              render();
-              backLines = n() + 2;
+              backLines = render();
               // Reattach listener
               stdin.on("data", onData);
             } catch {
@@ -139,8 +143,7 @@ export async function selectWithCombine(opts: CombineSelectOptions): Promise<str
               process.stderr.write(
                 `${Color.red}Combine failed; keeping current suggestions. Try again or select a single item.${Color.reset}\n`
               );
-              render();
-              backLines = n() + 2;
+              backLines = render();
               stdin.on("data", onData);
             }
             return;

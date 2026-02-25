@@ -14,6 +14,7 @@ export async function selectInteractive(opts: SelectOptions): Promise<string> {
     process.stdout.write(`${Color.gray}${Color.bold} ${opts.title ?? "Suggestions"}:${Color.reset}\n`);
     for (let i = 0; i < items.length; i++) {
       process.stdout.write(`  ${Color.yellow}[${i + 1}]${Color.reset} ${Color.cyan}${items[i]}${Color.reset}\n`);
+      if (i < items.length - 1) process.stdout.write("\n");
     }
     process.stdout.write(
       `\n${Color.bold}Select [1-${items.length}]${Color.reset} ${Color.dim}[default: 1]${Color.reset}: ${Color.cyan}`
@@ -63,6 +64,10 @@ async function rawModeSelect(title: string, items: string[]): Promise<string> {
       const indent = "    ";
       for (let j = 1; j < lines.length; j++) {
         process.stdout.write(`${indent}${color}${truncated(lines[j])}${Color.reset}\n`);
+        printed++;
+      }
+      if (i < n - 1) {
+        process.stdout.write("\n");
         printed++;
       }
     }

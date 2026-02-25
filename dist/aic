@@ -71,18 +71,20 @@ ${Q.map((X)=>`
 `),(q)=>{let W=q?T0.success:T0.error,z=q?F.green:F.red;process.stderr.write(`${z}${W}${F.reset} ${F.bold}${$}${F.reset}
 `)};let Q=["\u280B","\u2819","\u2839","\u2838","\u283C","\u2834","\u2826","\u2827","\u2807","\u280F"],X=0,J=!0,Y=setInterval(()=>{if(!J)return;process.stderr.write(`\r${Q[X%Q.length]} ${F.dim}${$}${F.reset}`),X++},90);return(q)=>{J=!1,clearInterval(Y);let W=q?T0.success:T0.error,z=q?F.green:F.red;process.stderr.write(`\r${z}${W}${F.reset} ${F.bold}${$}${F.reset}
 `)}}async function X9($){let Q=hK(),X=(N)=>{let D=Math.max(10,Q-12),E=[...N];return E.length<=D?N:E.slice(0,Math.max(0,D-4)).join("")+"...."},J=$.items.slice(0,10);if(J.length===0)throw Error("no suggestions to select");if(!process.stdin.isTTY){process.stdout.write(`${F.gray}${F.bold} ${$.title??"Suggestions"}:${F.reset}
-`);for(let E=0;E<J.length;E++)process.stdout.write(`  ${F.yellow}[${E+1}]${F.reset} ${F.cyan}${J[E]}${F.reset}
+`);for(let E=0;E<J.length;E++)if(process.stdout.write(`  ${F.yellow}[${E+1}]${F.reset} ${F.cyan}${J[E]}${F.reset}
+`),E<J.length-1)process.stdout.write(`
 `);process.stdout.write(`
 ${F.bold}Select [1-${J.length}]${F.reset} ${F.dim}[default: 1]${F.reset}: ${F.cyan}`);let N=await vK(),D=N.trim()===""?1:Math.min(Math.max(parseInt(N,10)||1,1),J.length);return process.stdout.write(F.reset),J[D-1]}let Y=process.stdin;Y.setRawMode?.(!0),Y.resume(),Y.setEncoding("utf8");let q=0,W=Array(J.length).fill(!1),z=()=>J.length,H=()=>`${F.gray}${F.bold} ${$.title??"Commit message suggestions"}:${F.reset}
 `,U=()=>`${F.dim}Use \u2191/\u2193 or j/k, Space to toggle select, numbers to pick, Enter to confirm.${F.reset}
 `,B=()=>{process.stdout.write("\r\x1B[2K"+H());let N=1;for(let D=0;D<z();D++){let E=D===9?0:D+1,M=D===q?`${F.yellow}> ${F.reset}`:"  ",A=D===q?F.green+F.bold:F.cyan,L=W[D]?"[x]":"[ ]",P=gK(J[D]);if(P.length===0){process.stdout.write(`${M}[${E}] ${L} ${A}${F.reset}
 `),N++;continue}process.stdout.write(`${M}[${E}] ${L} ${A}${X(P[0])}${F.reset}
 `),N++;let h="       ";for(let I=1;I<P.length;I++)process.stdout.write(`${h}${A}${X(P[I])}${F.reset}
+`),N++;if(D<z()-1)process.stdout.write(`
 `),N++}return process.stdout.write(U()),N++,N},K=B(),O=(N)=>{if(N>0)process.stdout.write(`\x1B[${N}A`)},j=()=>process.stdout.write("\x1B[2K\r"),V=()=>W.filter(Boolean).length,w=()=>{Y.setRawMode?.(!1),Y.pause()};return await new Promise((N)=>{let D=async(E)=>{let M=E;if(!M)return;switch(M){case"\x03":w(),Y.off("data",D),process.exit(130);return;case" ":if(z())W[q]=!W[q];break;case"k":if(q>0)q--;break;case"j":if(q<z()-1)q++;break;case"\r":case`
 `:{let A=V();if(A>=2){let L=[];for(let h=0;h<z();h++)if(W[h])L.push(J[h]);w(),Y.off("data",D);let P=ZQ(`Combining ${L.length} selected messages`);try{let h=await $.onCombine(L);P(!0),Y.setRawMode?.(!0),Y.resume(),Y.setEncoding("utf8"),J=h.suggestions.slice(0,10),q=0;for(let I=0;I<W.length;I++)W[I]=!1;for(let I=W.length;I<J.length;I++)W[I]=!1;process.stdout.write(`
 ${F.gray}${F.bold} Combined suggestions:${F.reset}
-`),B(),K=z()+2,Y.on("data",D)}catch{P(!1),Y.setRawMode?.(!0),Y.resume(),Y.setEncoding("utf8"),process.stderr.write(`${F.red}Combine failed; keeping current suggestions. Try again or select a single item.${F.reset}
-`),B(),K=z()+2,Y.on("data",D)}return}if(A===1){for(let L=0;L<z();L++)if(W[L]){w(),Y.off("data",D),N(J[L]);return}}w(),Y.off("data",D),N(J[Math.min(q,z()-1)]);return}default:if(M==="\x1B[A"){if(q>0)q--}else if(M==="\x1B[B"){if(q<z()-1)q++}else if(M>="1"&&M<="9"){let A=M.charCodeAt(0)-48;if(A>=1&&A<=z()){w(),Y.off("data",D),N(J[A-1]);return}}else if(M==="0"&&z()===10){w(),Y.off("data",D),N(J[9]);return}}O(K);for(let A=0;A<K;A++)if(j(),A<K-1)process.stdout.write(`
+`),K=B(),Y.on("data",D)}catch{P(!1),Y.setRawMode?.(!0),Y.resume(),Y.setEncoding("utf8"),process.stderr.write(`${F.red}Combine failed; keeping current suggestions. Try again or select a single item.${F.reset}
+`),K=B(),Y.on("data",D)}return}if(A===1){for(let L=0;L<z();L++)if(W[L]){w(),Y.off("data",D),N(J[L]);return}}w(),Y.off("data",D),N(J[Math.min(q,z()-1)]);return}default:if(M==="\x1B[A"){if(q>0)q--}else if(M==="\x1B[B"){if(q<z()-1)q++}else if(M>="1"&&M<="9"){let A=M.charCodeAt(0)-48;if(A>=1&&A<=z()){w(),Y.off("data",D),N(J[A-1]);return}}else if(M==="0"&&z()===10){w(),Y.off("data",D),N(J[9]);return}}O(K);for(let A=0;A<K;A++)if(j(),A<K-1)process.stdout.write(`
 `);O(K-1),K=B()};Y.on("data",D)})}function vK(){return new Promise(($)=>{let Q="",X=(J)=>{if(J===`
 `||J==="\r")process.stdin.off("data",X),$(Q);else Q+=J};process.stdin.on("data",X)})}function hK(){let $=process.stdout.columns;if(typeof $==="number"&&$>20)return $;let Q=Number.parseInt(process.env.COLUMNS||"",10);return Number.isFinite(Q)&&Q>20?Q:80}function gK($){return $.replace(/\r\n?/g,`
 `).split(`
