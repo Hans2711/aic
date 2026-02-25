@@ -29,6 +29,26 @@ const DIVERSITY_ANGLE_HINTS = [
   "security-sensitive paths or hardening changes",
 ] as const;
 
+const IMPERATIVE_VERBS = [
+  "add",
+  "adjust",
+  "align",
+  "clean",
+  "consolidate",
+  "enforce",
+  "expand",
+  "fix",
+  "harden",
+  "improve",
+  "optimize",
+  "refactor",
+  "remove",
+  "rename",
+  "simplify",
+  "support",
+  "update",
+] as const;
+
 // Helper function to generate suggestions in parallel with controlled concurrency
 async function generateSuggestionsParallel(
   client: any,
@@ -275,6 +295,7 @@ export async function generateSuggestions(cfg: SuggestionConfig): Promise<string
   debugMetric("CONTENT", `suggestions user content length=${userContent.length}`, 2);
 
   const target = Math.max(1, cfg.suggestions);
+  const generationTarget = target * 2;
 
   // Generate suggestions using parallel API calls for better performance
   const suggestions = await generateSuggestionsParallel(
@@ -282,13 +303,14 @@ export async function generateSuggestions(cfg: SuggestionConfig): Promise<string
     chosenModel,
     messages,
     maxTokens,
-    target,
+    generationTarget,
     cfg.suggestionConcurrency
   );
 
   if (suggestions.length === 0) throw new Error("empty suggestions");
-  // Ensure exactly target count
-  return suggestions.slice(0, target);
+  const ranked = rankAndDiversifySuggestions(suggestions, target, impact, filesList, highlights);
+  debugInfo("WORKER", `ranked suggestions: generated=${suggestions.length}, selected=${ranked.length}`);
+  return ranked;
 }
 
 function postProcess(text: string): string {
@@ -779,6 +801,115 @@ function extractHighlights(summary: string): string[] {
     }
   }
   return out;
+}
+
+function rankAndDiversifySuggestions(
+  candidates: string[],
+  target: number,
+  impact: ImpactAnalysis,
+  filesList: string[],
+  highlights: string[]
+): string[] {
+  const keywordPool = new Set<string>();
+  for (const file of impact.files) {
+    for (const kw of file.keywords) keywordPool.add(kw);
+  }
+  for (const path of filesList) {
+    for (const seg of path.split("/")) {
+      const normalized = seg.replace(/\.[^/.]+$/, "").toLowerCase();
+      if (normalized.length >= DISPLAY_LIMITS.MIN_KEYWORD_LENGTH) keywordPool.add(normalized);
+    }
+  }
+  for (const hl of highlights) {
+    for (const token of tokenizeForSimilarity(hl)) {
+      if (token.length >= DISPLAY_LIMITS.MIN_KEYWORD_LENGTH) keywordPool.add(token);
+    }
+  }
+  const keywords = Array.from(keywordPool);
+
+  const scored = candidates
+    .map((text, index) => ({
+      text,
+      index,
+      score: scoreSuggestion(text, keywords),
+    }))
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      if (a.text.length !== b.text.length) return b.text.length - a.text.length;
+      return a.index - b.index;
+    });
+
+  const selected: string[] = [];
+  for (const item of scored) {
+    if (selected.length >= target) break;
+    const tooSimilar = selected.some((picked) => suggestionSimilarity(picked, item.text) >= 0.72);
+    if (tooSimilar) continue;
+    selected.push(item.text);
+  }
+  if (selected.length < target) {
+    for (const item of scored) {
+      if (selected.length >= target) break;
+      if (selected.includes(item.text)) continue;
+      selected.push(item.text);
+    }
+  }
+  return selected.slice(0, target);
+}
+
+function scoreSuggestion(text: string, contextKeywords: string[]): number {
+  const normalized = text.trim();
+  if (!normalized) return -100;
+
+  const lower = normalized.toLowerCase();
+  let score = 0;
+
+  if (normalized.length >= 30 && normalized.length <= 100) score += 2.5;
+  else if (normalized.length >= 20) score += 1;
+  else score -= 2;
+
+  const lines = normalized.split("\n").filter(Boolean);
+  if (lines.length <= DISPLAY_LIMITS.MAX_COMMIT_MESSAGE_LINES) score += 0.5;
+  else score -= 1.5;
+
+  if (/^(feat|fix|chore|docs|refactor|test|perf|style|build|ci|revert)(\(|:)/i.test(lower)) score -= 2.5;
+  if (/(^|\s)(update|fix|change)\s+code(\s|$)/i.test(lower)) score -= 2.5;
+  if (/(^|\s)misc(\s|$)|(^|\s)stuff(\s|$)|(^|\s)various(\s|$)/i.test(lower)) score -= 2;
+  if (/\?$/.test(normalized)) score -= 1;
+
+  const firstWord = lower.split(/\s+/)[0] ?? "";
+  if (IMPERATIVE_VERBS.includes(firstWord as (typeof IMPERATIVE_VERBS)[number])) score += 1;
+
+  let keywordHits = 0;
+  for (const kw of contextKeywords) {
+    if (!kw || kw.length < DISPLAY_LIMITS.MIN_KEYWORD_LENGTH) continue;
+    if (lower.includes(kw)) keywordHits++;
+  }
+  score += Math.min(4, keywordHits * 0.45);
+
+  if (/\b(because|so that|in order to|to improve|to reduce)\b/i.test(lower)) score -= 1;
+
+  return Number(score.toFixed(3));
+}
+
+function suggestionSimilarity(a: string, b: string): number {
+  const aTokens = new Set(tokenizeForSimilarity(a));
+  const bTokens = new Set(tokenizeForSimilarity(b));
+  if (!aTokens.size || !bTokens.size) return 0;
+  let overlap = 0;
+  for (const token of aTokens) {
+    if (bTokens.has(token)) overlap++;
+  }
+  const union = new Set([...aTokens, ...bTokens]).size;
+  return union ? overlap / union : 0;
+}
+
+function tokenizeForSimilarity(text: string): string[] {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .map((t) => t.trim())
+    .filter((t) => t.length >= 3);
 }
 
 function jitterTemperature(seed: number, min: number, max: number, fallback: number): number {
