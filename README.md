@@ -1,10 +1,10 @@
 # aic
 
-AI-assisted git commit message generator (TypeScript, Bun) that summarizes your diff, proposes multiple subjects, and lets you combine them into a stronger message.
+AI-assisted git CLI for commit messages and hosted code review requests. It summarizes your staged diff to propose commit subjects, and it can draft and open a GitHub pull request or GitLab merge request for the current branch.
 
 ## Status
 
-The TypeScript CLI is functional for generating commit messages. `aic analyze` and `aic update` are scaffolding commands and not yet implemented.
+The TypeScript CLI is functional for generating commit messages plus GitHub/GitLab review requests. `aic analyze` and `aic update` are scaffolding commands and not yet implemented.
 
 ## Quick start
 
@@ -25,6 +25,11 @@ The TypeScript CLI is functional for generating commit messages. `aic analyze` a
    bun run src/cli.ts
    ```
    Use `AIC_NON_INTERACTIVE=1` to print the first suggestion (CI mode), or add `AIC_AUTO_COMMIT=1` to commit automatically.
+4. To create a review request for the current branch, make sure the matching host CLI is installed and authenticated, then run:
+   ```bash
+   bun run src/cli.ts mr
+   ```
+   `aic` detects the repo host from the Git remote and uses `gh` for GitHub repos or `glab` for GitLab repos.
 
 ## What the CLI does
 
@@ -34,6 +39,15 @@ The TypeScript CLI is functional for generating commit messages. `aic analyze` a
 - Interactive mode shows staged files, lets you pick or combine suggestions, then offers to commit and push; non-interactive mode just prints (and optionally commits).
 - Supports OpenAI, Claude, Gemini, or a custom OpenAI-compatible server; will pick a small or large model automatically based on diff size unless `AIC_MODEL` is set.
 - `AIC_MOCK=1` returns deterministic offline suggestions for quick testing.
+- `aic mr` detects the repo host and default branch, summarizes commits that are on the current branch but not on that default branch, generates a title and Markdown description, previews them, and creates the review request with `gh pr create` or `glab mr create`.
+
+## Review requests
+
+- `aic mr` creates a GitHub pull request or GitLab merge request for the current branch.
+- It targets the remote default branch by default; use `aic mr --target-branch <branch>` to override it.
+- `aic mr --draft` creates the review request as a draft.
+- The generated description includes `Summary`, `Testing`, and `Commit Breakdown` sections, with one breakdown item per commit in the branch.
+- `gh` must be available in `PATH` and authenticated for GitHub repos; `glab` must be available in `PATH` and authenticated for GitLab repos.
 
 ## Key environment variables
 
@@ -63,6 +77,7 @@ Provider selection:
 - `AIC_DEBUG=2` prints verbose debug information, including full content, system prompts, and detailed metrics.
 
 The debug output features:
+
 - Color-coded log levels (info, warnings, errors, success, metrics)
 - Categorized logging (API, TOKEN, MODEL, GIT, WORKER, CONTENT, SYSTEM)
 - Elapsed timestamps showing time since process start
