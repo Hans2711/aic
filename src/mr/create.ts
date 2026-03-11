@@ -26,6 +26,9 @@ type BranchTarget = {
   targetBranch: string;
   baseRef: string;
   repoProvider: RepoHostingProvider;
+  hostname: string;
+  repoUrl: string;
+  ghRepo: string;
 };
 
 type MergeRequestContent = {
@@ -37,6 +40,9 @@ export type PreparedMergeRequest = {
   branch: string;
   targetBranch: string;
   repoProvider: RepoHostingProvider;
+  hostname: string;
+  repoUrl: string;
+  ghRepo: string;
   content: MergeRequestContent;
 };
 
@@ -106,7 +112,15 @@ async function resolveTarget(branch: string, requestedTarget?: string): Promise<
   const remote = await currentRemote();
   const targetBranch = requestedTarget?.trim() || (await detectDefaultBranch(remote));
   const baseRef = await resolveBaseRef(remote, targetBranch);
-  return { remote, targetBranch, baseRef, repoProvider: host.provider };
+  return {
+    remote,
+    targetBranch,
+    baseRef,
+    repoProvider: host.provider,
+    hostname: host.hostname,
+    repoUrl: host.url,
+    ghRepo: host.ghRepo,
+  };
 }
 
 async function detectDefaultBranch(remote: string): Promise<string> {
@@ -361,7 +375,40 @@ async function pushCurrentBranch(remote: string, branch: string): Promise<void> 
   if (res.code !== 0) throw new Error(res.stderr || res.stdout || `git push -u ${remote} ${branch} failed`);
 }
 
+function compactMessage(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+async function ensureCliAuth(provider: RepoHostingProvider, hostname: string): Promise<void> {
+  if (provider === "github") {
+    const args = ["auth", "status"];
+    if (hostname) args.push("--hostname", hostname);
+    const res = await gh(...args);
+    if (res.code !== 0) {
+      const detail = compactMessage(res.stderr || res.stdout);
+      const hostLabel = hostname || "the GitHub host";
+      throw new Error(
+        `gh is not authenticated for ${hostLabel}; run 'gh auth login --hostname ${hostLabel}'${detail ? ` (${detail})` : ""}`
+      );
+    }
+    return;
+  }
+  if (provider === "gitlab") {
+    const args = ["auth", "status"];
+    if (hostname) args.push("--hostname", hostname);
+    const res = await glab(...args);
+    if (res.code !== 0) {
+      const detail = compactMessage(res.stderr || res.stdout);
+      const hostLabel = hostname || "the GitLab host";
+      throw new Error(
+        `glab is not authenticated for ${hostLabel}; run 'glab auth login --hostname ${hostLabel}'${detail ? ` (${detail})` : ""}`
+      );
+    }
+  }
+}
+
 async function createWithGh(
+  ghRepo: string,
   branch: string,
   targetBranch: string,
   content: MergeRequestContent,
@@ -379,6 +426,7 @@ async function createWithGh(
     "--body",
     content.description,
   ];
+  if (ghRepo) args.push("-R", ghRepo);
   if (draft) args.push("--draft");
   const res = await gh(...args);
   if (res.code === 127) {
@@ -391,6 +439,7 @@ async function createWithGh(
 }
 
 async function createWithGlab(
+  repoUrl: string,
   branch: string,
   targetBranch: string,
   content: MergeRequestContent,
@@ -410,6 +459,7 @@ async function createWithGlab(
     "--push",
     "--yes",
   ];
+  if (repoUrl) args.push("--repo", repoUrl);
   if (draft) args.push("--draft");
 
   const res = await glab(...args);
@@ -424,18 +474,23 @@ async function createWithGlab(
 
 async function createWithHost(
   provider: RepoHostingProvider,
+  hostname: string,
   remote: string,
+  repoUrl: string,
+  ghRepo: string,
   branch: string,
   targetBranch: string,
   content: MergeRequestContent,
   draft: boolean
 ): Promise<string> {
   if (provider === "github") {
+    await ensureCliAuth(provider, hostname);
     await pushCurrentBranch(remote, branch);
-    return createWithGh(branch, targetBranch, content, draft);
+    return createWithGh(ghRepo, branch, targetBranch, content, draft);
   }
   if (provider === "gitlab") {
-    return createWithGlab(branch, targetBranch, content, draft);
+    await ensureCliAuth(provider, hostname);
+    return createWithGlab(repoUrl, branch, targetBranch, content, draft);
   }
   throw new Error("unsupported Git remote host; expected GitHub or GitLab");
 }
@@ -470,7 +525,15 @@ export async function draftMergeRequest(
 
   const [files, stat] = await Promise.all([changedFiles(target.baseRef), diffStat(target.baseRef)]);
   const content = await generateMergeRequestContent(cfg, branch, target, commits, files, stat);
-  return { branch, targetBranch: target.targetBranch, repoProvider: target.repoProvider, content };
+  return {
+    branch,
+    targetBranch: target.targetBranch,
+    repoProvider: target.repoProvider,
+    hostname: target.hostname,
+    repoUrl: target.repoUrl,
+    ghRepo: target.ghRepo,
+    content,
+  };
 }
 
 export async function submitMergeRequest(
@@ -490,7 +553,10 @@ export async function submitMergeRequest(
   const remote = await currentRemote();
   const output = await createWithHost(
     prepared.repoProvider,
+    prepared.hostname,
     remote,
+    prepared.repoUrl,
+    prepared.ghRepo,
     prepared.branch,
     prepared.targetBranch,
     prepared.content,

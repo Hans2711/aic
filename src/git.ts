@@ -9,6 +9,8 @@ export type RepoHostInfo = {
   remote: string;
   url: string;
   hostname: string;
+  projectPath: string;
+  ghRepo: string;
 };
 
 function errorMessage(error: unknown): string {
@@ -180,6 +182,25 @@ function parseRemoteHostname(url: string): string {
   }
 }
 
+function parseRemoteProjectPath(url: string): string {
+  const trimmed = url.trim();
+  if (!trimmed) return "";
+  const scpLike = /^[^@]+@[^:]+:(.+)$/.exec(trimmed);
+  let path = scpLike?.[1] || "";
+  if (!path) {
+    try {
+      path = new URL(trimmed).pathname;
+    } catch {
+      const match = /^(?:ssh:\/\/)?(?:[^@]+@)?[^/:]+(?::\d+)?[:/](.+)$/.exec(trimmed);
+      path = match?.[1] || "";
+    }
+  }
+  return path
+    .replace(/^\/+/, "")
+    .replace(/\.git$/i, "")
+    .trim();
+}
+
 function providerFromHostname(hostname: string): RepoHostingProvider {
   if (!hostname) return "unknown";
   if (hostname === "github.com" || hostname.endsWith(".github.com")) return "github";
@@ -193,11 +214,14 @@ export async function repoHostInfo(): Promise<RepoHostInfo> {
   const remote = await currentRemote();
   const url = await remoteUrl(remote);
   const hostname = parseRemoteHostname(url);
+  const projectPath = parseRemoteProjectPath(url);
   return {
     provider: providerFromHostname(hostname),
     remote,
     url,
     hostname,
+    projectPath,
+    ghRepo: hostname && projectPath ? `${hostname}/${projectPath}` : "",
   };
 }
 
@@ -217,8 +241,10 @@ async function glab(...args: string[]): Promise<{ stdout: string; stderr: string
   return run("glab", args);
 }
 
-async function githubPrInfo(): Promise<{ title: string; issues: string[] }> {
-  const res = await gh("pr", "view", "--json", "title,closingIssuesReferences");
+async function githubPrInfo(host: RepoHostInfo): Promise<{ title: string; issues: string[] }> {
+  const args = ["pr", "view", "--json", "title,closingIssuesReferences"];
+  if (host.ghRepo) args.push("-R", host.ghRepo);
+  const res = await gh(...args);
   if (res.code !== 0) {
     if (res.code === 127) debugInfo("GIT", "gh not found; skipping PR context");
     return { title: "", issues: [] };
@@ -231,7 +257,7 @@ async function githubPrInfo(): Promise<{ title: string; issues: string[] }> {
       for (const ref of data.closingIssuesReferences) {
         const num = ref?.number ?? 0;
         if (num > 0) {
-          const is = await githubIssueText(num);
+          const is = await githubIssueText(num, host);
           if (is) issues.push(is);
         }
       }
@@ -242,8 +268,10 @@ async function githubPrInfo(): Promise<{ title: string; issues: string[] }> {
   }
 }
 
-async function githubIssueText(num: number): Promise<string> {
-  const res = await gh("issue", "view", String(num), "--json", "title,body");
+async function githubIssueText(num: number, host: RepoHostInfo): Promise<string> {
+  const args = ["issue", "view", String(num), "--json", "title,body"];
+  if (host.ghRepo) args.push("-R", host.ghRepo);
+  const res = await gh(...args);
   if (res.code !== 0) return "";
   try {
     const data: GhIssueView = JSON.parse(res.stdout);
@@ -257,9 +285,10 @@ async function githubIssueText(num: number): Promise<string> {
   }
 }
 
-async function gitlabMrInfo(branch: string): Promise<{ title: string; issues: string[] }> {
+async function gitlabMrInfo(host: RepoHostInfo, branch: string): Promise<{ title: string; issues: string[] }> {
   const ref = branch.trim() || undefined;
   const args = ref ? ["mr", "view", ref, "--output", "json"] : ["mr", "view", "--output", "json"];
+  if (host.url) args.push("--repo", host.url);
   const res = await glab(...args);
   if (res.code !== 0) {
     if (res.code === 127) debugInfo("GIT", "glab not found; skipping MR context");
@@ -305,10 +334,10 @@ export async function repoContext(): Promise<string> {
   let issues: string[] = [];
   if (host.provider === "github") {
     reviewLabel = "PR Title";
-    ({ title, issues } = await githubPrInfo());
+    ({ title, issues } = await githubPrInfo(host));
   } else if (host.provider === "gitlab") {
     reviewLabel = "MR Title";
-    ({ title, issues } = await gitlabMrInfo(branch));
+    ({ title, issues } = await gitlabMrInfo(host, branch));
   }
   return formatContext(branch, reviewLabel, title, issues);
 }
