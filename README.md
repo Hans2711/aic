@@ -40,6 +40,7 @@ The TypeScript CLI is functional for generating commit messages plus GitHub/GitL
 - Supports OpenAI, Claude, Gemini, or a custom OpenAI-compatible server; will pick a small or large model automatically based on diff size unless `AIC_MODEL` is set.
 - `AIC_MOCK=1` returns deterministic offline suggestions for quick testing.
 - `aic mr` detects the repo host and default branch, summarizes commits that are on the current branch but not on that default branch, generates a title and Markdown description, previews them, and creates the review request with `gh pr create` or `glab mr create`.
+- If the current branch already has a pull request or merge request, `aic mr` proposes updated title/description text and updates the existing review instead of creating a duplicate.
 
 ## Review requests
 

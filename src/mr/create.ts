@@ -36,6 +36,12 @@ type MergeRequestContent = {
   description: string;
 };
 
+type ExistingReview = {
+  title: string;
+  description: string;
+  url: string;
+};
+
 export type PreparedMergeRequest = {
   branch: string;
   targetBranch: string;
@@ -43,6 +49,7 @@ export type PreparedMergeRequest = {
   hostname: string;
   repoUrl: string;
   ghRepo: string;
+  existingReview?: ExistingReview;
   content: MergeRequestContent;
 };
 
@@ -195,7 +202,8 @@ function buildPrompt(
   commits: CommitInfo[],
   files: string[],
   stat: string,
-  systemAddition: string
+  systemAddition: string,
+  existingReview?: ExistingReview
 ): Array<{ role: "system" | "user"; content: string }> {
   const reviewTerm = target.repoProvider === "github" ? "pull request" : "merge request";
   let system =
@@ -207,6 +215,7 @@ function buildPrompt(
     "In '## Summary', write 2-5 bullets that summarize the branch as a whole. " +
     "In '## Testing', if no testing evidence is provided, write exactly '- Not run (not mentioned in commits)'. " +
     "In '## Commit Breakdown', include one bullet per commit and make sure every listed commit appears exactly once, using its short SHA and a concise explanation grounded in the commit subject/body. " +
+    "If an existing review title or description is provided, treat it as the current version and propose an improved update rather than repeating it verbatim unless it is already optimal. " +
     "Do not invent issues, deployment steps, metrics, or tests. " +
     "Output exactly in this format:\nTITLE: <title>\nDESCRIPTION:\n<markdown>";
   if (systemAddition) system += ` Additional user instructions: ${systemAddition}`;
@@ -226,6 +235,10 @@ function buildPrompt(
   }
   if (stat) {
     user += `\nDiff stat:\n${stat}\n`;
+  }
+  if (existingReview) {
+    user += `\nExisting ${reviewTerm} title:\n${existingReview.title}\n`;
+    user += `\nExisting ${reviewTerm} description:\n${existingReview.description || "(empty)"}\n`;
   }
   user += `\nCommits on this branch not in ${target.baseRef}:\n${commitLines.join("\n\n")}`;
 
@@ -302,7 +315,8 @@ async function generateMergeRequestContent(
   target: BranchTarget,
   commits: CommitInfo[],
   files: string[],
-  stat: string
+  stat: string,
+  existingReview?: ExistingReview
 ): Promise<MergeRequestContent> {
   if (envBool(Env.AIC_MOCK)) {
     return mockMergeRequestContent(branch, commits);
@@ -310,7 +324,7 @@ async function generateMergeRequestContent(
 
   const apiKey = getApiKeyForProvider(cfg.provider);
   const client = newProviderClient(cfg.provider, apiKey);
-  const messages = buildPrompt(branch, target, commits, files, stat, cfg.systemAddition);
+  const messages = buildPrompt(branch, target, commits, files, stat, cfg.systemAddition, existingReview);
   const maxTokens = cfg.model.includes("gpt-5") ? Math.max(GENERATION_CONFIG.MAX_TOKENS_REASONING, 2200) : 1400;
   const response = await client.chat({
     model: cfg.model,
@@ -361,6 +375,13 @@ function renderPreview(content: MergeRequestContent): void {
   process.stdout.write(`  ${Color.green}${content.title}${Color.reset}\n`);
   process.stdout.write(`\n${Color.bold}Review description:${Color.reset}\n`);
   process.stdout.write(`${content.description}\n`);
+}
+
+function renderExistingReview(existingReview: ExistingReview): void {
+  process.stdout.write(`\n${Color.bold}Current review title:${Color.reset}\n`);
+  process.stdout.write(`  ${Color.yellow}${existingReview.title}${Color.reset}\n`);
+  process.stdout.write(`\n${Color.bold}Current review description:${Color.reset}\n`);
+  process.stdout.write(`${existingReview.description || "(empty)"}\n`);
 }
 
 async function pushCurrentBranch(remote: string, branch: string): Promise<void> {
@@ -438,6 +459,24 @@ async function createWithGh(
   return (res.stdout || res.stderr).trim();
 }
 
+async function updateWithGh(
+  ghRepo: string,
+  branch: string,
+  targetBranch: string,
+  content: MergeRequestContent
+): Promise<string> {
+  const args = ["pr", "edit", branch, "--title", content.title, "--body", content.description, "--base", targetBranch];
+  if (ghRepo) args.push("-R", ghRepo);
+  const res = await gh(...args);
+  if (res.code === 127) {
+    throw new Error("gh is not installed or not available in PATH");
+  }
+  if (res.code !== 0) {
+    throw new Error(res.stderr || res.stdout || "gh pr edit failed");
+  }
+  return (res.stdout || res.stderr).trim();
+}
+
 async function createWithGlab(
   repoUrl: string,
   branch: string,
@@ -472,6 +511,87 @@ async function createWithGlab(
   return (res.stdout || res.stderr).trim();
 }
 
+async function updateWithGlab(
+  repoUrl: string,
+  branch: string,
+  targetBranch: string,
+  content: MergeRequestContent,
+  draft: boolean
+): Promise<string> {
+  const args = [
+    "mr",
+    "update",
+    branch,
+    "--title",
+    content.title,
+    "--description",
+    content.description,
+    "--target-branch",
+    targetBranch,
+    "--yes",
+  ];
+  if (repoUrl) args.push("--repo", repoUrl);
+  if (draft) args.push("--draft");
+
+  const res = await glab(...args);
+  if (res.code === 127) {
+    throw new Error("glab is not installed or not available in PATH");
+  }
+  if (res.code !== 0) {
+    throw new Error(res.stderr || res.stdout || "glab mr update failed");
+  }
+  return (res.stdout || res.stderr).trim();
+}
+
+async function findExistingGithubReview(ghRepo: string, branch: string): Promise<ExistingReview | undefined> {
+  const args = ["pr", "view", branch, "--json", "title,body,url"];
+  if (ghRepo) args.push("-R", ghRepo);
+  const res = await gh(...args);
+  if (res.code !== 0) return undefined;
+  try {
+    const data = JSON.parse(res.stdout) as { title?: string; body?: string; url?: string };
+    const title = (data.title || "").trim();
+    if (!title) return undefined;
+    return {
+      title,
+      description: (data.body || "").trim(),
+      url: (data.url || "").trim(),
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+async function findExistingGitlabReview(repoUrl: string, branch: string): Promise<ExistingReview | undefined> {
+  const args = ["mr", "view", branch, "--output", "json"];
+  if (repoUrl) args.push("--repo", repoUrl);
+  const res = await glab(...args);
+  if (res.code !== 0) return undefined;
+  try {
+    const data = JSON.parse(res.stdout) as { title?: string; description?: string; web_url?: string };
+    const title = (data.title || "").trim();
+    if (!title) return undefined;
+    return {
+      title,
+      description: (data.description || "").trim(),
+      url: (data.web_url || "").trim(),
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+async function findExistingReview(
+  provider: RepoHostingProvider,
+  repoUrl: string,
+  ghRepo: string,
+  branch: string
+): Promise<ExistingReview | undefined> {
+  if (provider === "github") return findExistingGithubReview(ghRepo, branch);
+  if (provider === "gitlab") return findExistingGitlabReview(repoUrl, branch);
+  return undefined;
+}
+
 async function createWithHost(
   provider: RepoHostingProvider,
   hostname: string,
@@ -481,15 +601,22 @@ async function createWithHost(
   branch: string,
   targetBranch: string,
   content: MergeRequestContent,
+  existingReview: ExistingReview | undefined,
   draft: boolean
 ): Promise<string> {
   if (provider === "github") {
     await ensureCliAuth(provider, hostname);
+    if (existingReview) {
+      return updateWithGh(ghRepo, branch, targetBranch, content);
+    }
     await pushCurrentBranch(remote, branch);
     return createWithGh(ghRepo, branch, targetBranch, content, draft);
   }
   if (provider === "gitlab") {
     await ensureCliAuth(provider, hostname);
+    if (existingReview) {
+      return updateWithGlab(repoUrl, branch, targetBranch, content, draft);
+    }
     return createWithGlab(repoUrl, branch, targetBranch, content, draft);
   }
   throw new Error("unsupported Git remote host; expected GitHub or GitLab");
@@ -517,6 +644,7 @@ export async function draftMergeRequest(
   }
 
   debugInfo("GIT", `MR source=${branch}, target=${target.targetBranch}, baseRef=${target.baseRef}`);
+  const existingReview = await findExistingReview(target.repoProvider, target.repoUrl, target.ghRepo, branch);
 
   const commits = await collectCommits(target.baseRef);
   if (commits.length === 0) {
@@ -524,7 +652,7 @@ export async function draftMergeRequest(
   }
 
   const [files, stat] = await Promise.all([changedFiles(target.baseRef), diffStat(target.baseRef)]);
-  const content = await generateMergeRequestContent(cfg, branch, target, commits, files, stat);
+  const content = await generateMergeRequestContent(cfg, branch, target, commits, files, stat, existingReview);
   return {
     branch,
     targetBranch: target.targetBranch,
@@ -532,6 +660,7 @@ export async function draftMergeRequest(
     hostname: target.hostname,
     repoUrl: target.repoUrl,
     ghRepo: target.ghRepo,
+    existingReview,
     content,
   };
 }
@@ -540,13 +669,13 @@ export async function submitMergeRequest(
   prepared: PreparedMergeRequest,
   options: CreateMergeRequestOptions = {}
 ): Promise<void> {
+  if (prepared.existingReview) renderExistingReview(prepared.existingReview);
   renderPreview(prepared.content);
   const reviewLabel = prepared.repoProvider === "github" ? "pull request" : "merge request";
-  const shouldCreate = options.confirm === false ? true : await confirmCreate(`Create this ${reviewLabel} now?`);
+  const action = prepared.existingReview ? "Update" : "Create";
+  const shouldCreate = options.confirm === false ? true : await confirmCreate(`${action} this ${reviewLabel} now?`);
   if (!shouldCreate) {
-    process.stdout.write(
-      `${Color.yellow}${reviewLabel[0].toUpperCase() + reviewLabel.slice(1)} creation canceled.${Color.reset}\n`
-    );
+    process.stdout.write(`${Color.yellow}${action} canceled.${Color.reset}\n`);
     return;
   }
 
@@ -560,6 +689,7 @@ export async function submitMergeRequest(
     prepared.branch,
     prepared.targetBranch,
     prepared.content,
+    prepared.existingReview,
     !!options.draft
   );
   if (output) process.stdout.write(`\n${output}\n`);
