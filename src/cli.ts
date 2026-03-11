@@ -20,6 +20,7 @@ import { offerCommit } from "./commit/offer";
 import { getApiKeyForProvider } from "./providers";
 import { stagedFiles } from "./git";
 import { formatEnvVarsHelp, formatEnvVarsTable } from "./ui/table";
+import { draftMergeRequest, submitMergeRequest } from "./mr/create";
 
 class MainCommand extends Command {
   static paths = [Command.Default];
@@ -134,8 +135,56 @@ class UpdateCommand extends Command {
   }
 }
 
+class MergeRequestCommand extends Command {
+  static paths = [["mr"]];
+
+  static usage = Command.Usage({
+    description: "Create a pull request or merge request for the current branch",
+    details: formatEnvVarsHelp(helpEnvRowsCore(), helpEnvRowsCustom()),
+  });
+
+  noColor = Option.Boolean("--no-color", false, { description: "Disable colored output" });
+  systemAddition = Option.String("-s", { required: false, description: "Extra instruction for MR generation" });
+  targetBranch = Option.String("-b,--target-branch", { required: false, description: "Override the MR target branch" });
+  draft = Option.Boolean("--draft", false, { description: "Create the merge request as a draft" });
+
+  async execute() {
+    initColors(this.noColor);
+    warnUnknownAICEnv();
+
+    const cfg = loadConfig(this.systemAddition ?? "");
+    const apiKey = getApiKeyForProvider(cfg.provider);
+    if (!apiKey && cfg.provider !== "custom" && !envBool(Env.AIC_MOCK)) {
+      this.context.stdout.write(this.cli.usage(MergeRequestCommand, { detailed: true }));
+      this.context.stderr.write(
+        `${Color.yellow}Hint:${Color.reset} export a provider API key, e.g. ${Color.green}export OPENAI_API_KEY=sk-...${Color.reset}\n`
+      );
+      return 1;
+    }
+
+    const stop = spinner(`Drafting merge request for the current branch with ${cfg.model}`);
+    try {
+      const prepared = await draftMergeRequest(
+        { ...cfg, provider: cfg.provider },
+        { targetBranch: this.targetBranch, draft: this.draft }
+      );
+      stop(true);
+      await submitMergeRequest(prepared, { draft: this.draft, confirm: !envBool(Env.AIC_NON_INTERACTIVE) });
+      return 0;
+    } catch (err) {
+      stop(false);
+      const msg = (err as Error)?.message || String(err);
+      this.context.stderr.write(
+        `${Color.bold}${Color.red} ${Icon.error} ERROR${Color.reset}  ${Color.red}${msg}${Color.reset}\n`
+      );
+      return 1;
+    }
+  }
+}
+
 const cli = new Cli({ binaryLabel: "aic", binaryName: "aic", binaryVersion: VERSION });
 cli.register(MainCommand);
+cli.register(MergeRequestCommand);
 cli.register(AnalyzeCommand);
 cli.register(UpdateCommand);
 
